@@ -1,5 +1,8 @@
 package models
 
+// AI-related models for the Darooyar API
+// These models are used for interacting with the OpenAI API
+
 // CompletionRequest represents a request for AI text completion
 type CompletionRequest struct {
 	Prompt string `json:"prompt" binding:"required"`

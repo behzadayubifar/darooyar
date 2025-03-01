@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,10 +13,10 @@ import (
 	"github.com/darooyar/server/models"
 )
 
-// AvalAIHandler handles Aval AI-related API endpoints
+// AvalAIHandler handles AI-related API endpoints using Aval AI
 type AvalAIHandler struct {
-	apiKey     string
-	apiBaseURL string
+	apiKey  string
+	baseURL string
 }
 
 // NewAvalAIHandler creates a new Aval AI handler
@@ -24,19 +25,49 @@ func NewAvalAIHandler() *AvalAIHandler {
 	apiKey := os.Getenv("AVALAI_API_KEY")
 	if apiKey == "" {
 		log.Println("Warning: AVALAI_API_KEY environment variable is not set")
+		// In production, you might want to fail fast here
 	}
 
-	// Get API base URL from environment variable or use default
-	apiBaseURL := os.Getenv("AVALAI_API_BASE_URL")
-	if apiBaseURL == "" {
-		apiBaseURL = "https://api.aval.ai" // Default base URL, replace with actual Aval AI API URL
-		log.Println("Using default Aval AI API base URL:", apiBaseURL)
+	// Get base URL from environment variable or use default
+	baseURL := os.Getenv("AVALAI_API_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.avalai.ir/v1"
+		log.Println("Using default Aval AI base URL:", baseURL)
 	}
 
 	return &AvalAIHandler{
-		apiKey:     apiKey,
-		apiBaseURL: apiBaseURL,
+		apiKey:  apiKey,
+		baseURL: baseURL,
 	}
+}
+
+// makeRequest makes a request to the Aval AI API
+func (h *AvalAIHandler) makeRequest(ctx context.Context, endpoint string, requestBody interface{}) (*http.Response, error) {
+	// Convert request body to JSON
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %w", err)
+	}
+
+	// Create request
+	url := h.baseURL + endpoint
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+h.apiKey)
+
+	// Make request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %w", err)
+	}
+
+	return resp, nil
 }
 
 // GenerateCompletion handles text completion requests
@@ -44,14 +75,14 @@ func (h *AvalAIHandler) GenerateCompletion(w http.ResponseWriter, r *http.Reques
 	// Set content type
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check if API key is set
+	// Check if API key is initialized
 	if h.apiKey == "" {
-		writeErrorResponse(w, "Aval AI API key not set. Please set AVALAI_API_KEY environment variable.", http.StatusInternalServerError)
+		writeErrorResponse(w, "Aval AI API key not initialized. API key may be missing.", http.StatusInternalServerError)
 		return
 	}
 
 	// Parse the request body
-	var request models.AvalAICompletionRequest
+	var request models.CompletionRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		writeErrorResponse(w, "Invalid request format", http.StatusBadRequest)
@@ -67,34 +98,20 @@ func (h *AvalAIHandler) GenerateCompletion(w http.ResponseWriter, r *http.Reques
 	// Log the request (in a real app, you might want to sanitize sensitive data)
 	log.Printf("Received completion request: %s", request.Prompt)
 
-	// Prepare the request to Aval AI API
-	// Note: Adjust the request structure based on actual Aval AI API requirements
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"prompt": request.Prompt,
-		"model":  "gpt-3.5", // Replace with appropriate Aval AI model name
-	})
-	if err != nil {
-		log.Printf("Error marshaling request: %v", err)
-		writeErrorResponse(w, "Error preparing request", http.StatusInternalServerError)
-		return
+	// Prepare request for Aval AI API
+	avalAIRequest := models.AvalAICompletionRequest{
+		Model: "gpt-3.5-turbo", // Default model
+		Messages: []models.AvalAIMessage{
+			{
+				Role:    "user",
+				Content: request.Prompt,
+			},
+		},
+		MaxTokens: 500,
 	}
 
-	// Create HTTP request to Aval AI API
-	completionURL := fmt.Sprintf("%s/v1/completions", h.apiBaseURL)
-	req, err := http.NewRequest("POST", completionURL, bytes.NewBuffer(requestBody))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		writeErrorResponse(w, "Error creating request", http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", h.apiKey))
-
-	// Send request to Aval AI API
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Make request to Aval AI API
+	resp, err := h.makeRequest(r.Context(), "/chat/completions", avalAIRequest)
 	if err != nil {
 		log.Printf("Error calling Aval AI API: %v", err)
 		writeErrorResponse(w, "Error generating completion", http.StatusInternalServerError)
@@ -102,42 +119,30 @@ func (h *AvalAIHandler) GenerateCompletion(w http.ResponseWriter, r *http.Reques
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		writeErrorResponse(w, "Error reading response", http.StatusInternalServerError)
-		return
-	}
-
-	// Check response status code
+	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Aval AI API returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
-		writeErrorResponse(w, fmt.Sprintf("Aval AI API error: %s", string(body)), http.StatusInternalServerError)
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Aval AI API error (status %d): %s", resp.StatusCode, string(body))
+		writeErrorResponse(w, fmt.Sprintf("Aval AI API error (status %d)", resp.StatusCode), http.StatusInternalServerError)
 		return
 	}
 
 	// Parse response
-	var avalResponse models.AvalAIAPIResponse
-	err = json.Unmarshal(body, &avalResponse)
-	if err != nil {
-		log.Printf("Error parsing response: %v", err)
-		writeErrorResponse(w, "Error parsing response", http.StatusInternalServerError)
+	var avalAIResponse models.AvalAICompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&avalAIResponse); err != nil {
+		log.Printf("Error parsing Aval AI response: %v", err)
+		writeErrorResponse(w, "Error parsing completion response", http.StatusInternalServerError)
 		return
 	}
 
-	// Check if response is successful
-	if !avalResponse.Success {
-		log.Printf("Aval AI API returned error: %s", avalResponse.Message)
-		writeErrorResponse(w, fmt.Sprintf("Aval AI API error: %s", avalResponse.Message), http.StatusInternalServerError)
-		return
+	// Extract the response
+	completion := ""
+	if len(avalAIResponse.Choices) > 0 {
+		completion = avalAIResponse.Choices[0].Message.Content
 	}
-
-	// Extract the completion text
-	completion := avalResponse.Data.Text
 
 	// Write the response
-	response := models.AvalAICompletionResponse{
+	response := models.CompletionResponse{
 		Status:     "success",
 		Completion: completion,
 	}
@@ -150,9 +155,9 @@ func (h *AvalAIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http
 	// Set content type
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check if API key is set
+	// Check if API key is initialized
 	if h.apiKey == "" {
-		writeErrorResponse(w, "Aval AI API key not set. Please set AVALAI_API_KEY environment variable.", http.StatusInternalServerError)
+		writeErrorResponse(w, "Aval AI API key not initialized. API key may be missing.", http.StatusInternalServerError)
 		return
 	}
 
@@ -174,46 +179,26 @@ func (h *AvalAIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http
 	log.Printf("Received AI prescription analysis request: %s", request.Text)
 
 	// Prepare the prompt for the AI
-	systemPrompt := "شما یک دستیار داروساز هستید که به تحلیل نسخه‌های پزشکی کمک می‌کند. لطفاً داروها، دوزها و توصیه‌های مصرف را به فارسی استخراج کنید."
-	userPrompt := "لطفاً این نسخه پزشکی را تحلیل کنید و داروها، دوزها و توصیه‌های مصرف را استخراج کنید:\n\n" + request.Text
+	prompt := "لطفاً این نسخه پزشکی را تحلیل کنید و داروها، دوزها و توصیه‌های مصرف را استخراج کنید:\n\n" + request.Text
 
-	// Prepare the request to Aval AI API
-	// Note: Adjust the request structure based on actual Aval AI API requirements
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"model": "gpt-3.5", // Replace with appropriate Aval AI model name
-		"messages": []map[string]string{
+	// Prepare request for Aval AI API
+	avalAIRequest := models.AvalAICompletionRequest{
+		Model: "gpt-3.5-turbo", // Default model
+		Messages: []models.AvalAIMessage{
 			{
-				"role":    "system",
-				"content": systemPrompt,
+				Role:    "system",
+				Content: "شما یک دستیار داروساز هستید که به تحلیل نسخه‌های پزشکی کمک می‌کند. لطفاً داروها، دوزها و توصیه‌های مصرف را به فارسی استخراج کنید.",
 			},
 			{
-				"role":    "user",
-				"content": userPrompt,
+				Role:    "user",
+				Content: prompt,
 			},
 		},
-	})
-	if err != nil {
-		log.Printf("Error marshaling request: %v", err)
-		writeErrorResponse(w, "Error preparing request", http.StatusInternalServerError)
-		return
+		MaxTokens: 1000,
 	}
 
-	// Create HTTP request to Aval AI API
-	chatURL := fmt.Sprintf("%s/v1/chat/completions", h.apiBaseURL)
-	req, err := http.NewRequest("POST", chatURL, bytes.NewBuffer(requestBody))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		writeErrorResponse(w, "Error creating request", http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", h.apiKey))
-
-	// Send request to Aval AI API
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Make request to Aval AI API
+	resp, err := h.makeRequest(r.Context(), "/chat/completions", avalAIRequest)
 	if err != nil {
 		log.Printf("Error calling Aval AI API: %v", err)
 		writeErrorResponse(w, "Error analyzing prescription", http.StatusInternalServerError)
@@ -221,39 +206,27 @@ func (h *AvalAIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		writeErrorResponse(w, "Error reading response", http.StatusInternalServerError)
-		return
-	}
-
-	// Check response status code
+	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Aval AI API returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
-		writeErrorResponse(w, fmt.Sprintf("Aval AI API error: %s", string(body)), http.StatusInternalServerError)
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Aval AI API error (status %d): %s", resp.StatusCode, string(body))
+		writeErrorResponse(w, fmt.Sprintf("Aval AI API error (status %d)", resp.StatusCode), http.StatusInternalServerError)
 		return
 	}
 
 	// Parse response
-	var avalResponse models.AvalAIAPIResponse
-	err = json.Unmarshal(body, &avalResponse)
-	if err != nil {
-		log.Printf("Error parsing response: %v", err)
-		writeErrorResponse(w, "Error parsing response", http.StatusInternalServerError)
+	var avalAIResponse models.AvalAICompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&avalAIResponse); err != nil {
+		log.Printf("Error parsing Aval AI response: %v", err)
+		writeErrorResponse(w, "Error parsing analysis response", http.StatusInternalServerError)
 		return
 	}
 
-	// Check if response is successful
-	if !avalResponse.Success {
-		log.Printf("Aval AI API returned error: %s", avalResponse.Message)
-		writeErrorResponse(w, fmt.Sprintf("Aval AI API error: %s", avalResponse.Message), http.StatusInternalServerError)
-		return
+	// Extract the response
+	analysis := ""
+	if len(avalAIResponse.Choices) > 0 {
+		analysis = avalAIResponse.Choices[0].Message.Content
 	}
-
-	// Extract the analysis text
-	analysis := avalResponse.Data.Text
 
 	// Write the response
 	response := models.AnalysisResponse{

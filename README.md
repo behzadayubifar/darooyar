@@ -38,7 +38,7 @@ The project consists of two main components:
 
    ```
    AVALAI_API_KEY=your_avalai_api_key_here
-   AVALAI_API_BASE_URL=https://api.aval.ai
+   AVALAI_API_BASE_URL=https://api.avalai.ir/v1
    ```
 
 3. Set up the Flutter app:
@@ -66,7 +66,7 @@ The project consists of two main components:
 
 - Prescription text analysis
 - Prescription image analysis
-- AI-powered prescription interpretation using Aval AI
+- AI-powered prescription interpretation
 - User-friendly mobile interface
 
 ## Development

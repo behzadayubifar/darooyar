@@ -8,14 +8,14 @@ This is the API server for the دارویار (Darooyar) prescription analysis a
 
 - Go 1.16 or higher
 - Git
-- OpenAI API Key (for AI-powered features)
+- Aval AI API Key (for AI-powered features)
 
 ### Installation
 
 1. Clone the repository:
 
    ```
-   git clone https://github.com/yourusername/darooyar.git
+   git clone https://github.com/behzadayubifar/darooyar.git
    cd darooyar/server
    ```
 
@@ -30,10 +30,11 @@ This is the API server for the دارویار (Darooyar) prescription analysis a
    Create a `.env` file in the server directory with the following content:
 
    ```
-   OPENAI_API_KEY=your_openai_api_key_here
+   AVALAI_API_KEY=your_avalai_api_key_here
+   AVALAI_API_BASE_URL=https://api.aval.ai
    ```
 
-   Replace `your_openai_api_key_here` with your actual OpenAI API key.
+   Replace `your_avalai_api_key_here` with your actual Aval AI API key.
 
 4. Run the server:
    ```
@@ -118,9 +119,9 @@ Returns an AI-powered analysis of the prescription text using OpenAI.
 
 ### OpenAI Integration
 
-The server uses the OpenAI API for AI-powered features. The integration is implemented in the `handlers/ai.go` file. To use these features, you need to:
+The server uses the Aval AI API for AI-powered features. The integration is implemented in the `handlers/avalai.go` file. To use these features, you need to:
 
-1. Get an API key from OpenAI: https://platform.openai.com/
+1. Get an API key from Aval AI
 2. Set the API key in the `.env` file
 3. Use the AI-powered endpoints
 

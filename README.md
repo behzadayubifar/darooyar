@@ -16,7 +16,7 @@ The project consists of two main components:
 - Flutter SDK
 - Go 1.16 or higher
 - Git
-- OpenAI API Key (for AI-powered features)
+- Aval AI API Key (for AI-powered features)
 
 ### Installation
 
@@ -34,10 +34,11 @@ The project consists of two main components:
    go mod download
    ```
 
-   Create a `.env` file in the server directory with your OpenAI API key:
+   Create a `.env` file in the server directory with your Aval AI API key:
 
    ```
-   OPENAI_API_KEY=your_openai_api_key_here
+   AVALAI_API_KEY=your_avalai_api_key_here
+   AVALAI_API_BASE_URL=https://api.aval.ai
    ```
 
 3. Set up the Flutter app:
@@ -65,7 +66,7 @@ The project consists of two main components:
 
 - Prescription text analysis
 - Prescription image analysis
-- AI-powered prescription interpretation
+- AI-powered prescription interpretation using Aval AI
 - User-friendly mobile interface
 
 ## Development

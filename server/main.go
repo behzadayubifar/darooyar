@@ -22,7 +22,7 @@ func main() {
 
 	// Initialize handlers
 	prescriptionHandler := handlers.NewPrescriptionHandler()
-	aiHandler := handlers.NewAIHandler()
+	avalAIHandler := handlers.NewAvalAIHandler()
 
 	// Define API routes
 
@@ -44,8 +44,8 @@ func main() {
 	mux.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
 
 	// AI endpoints
-	mux.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)
-	mux.HandleFunc("POST /api/ai/analyze-prescription", aiHandler.AnalyzePrescriptionWithAI)
+	mux.HandleFunc("POST /api/ai/completion", avalAIHandler.GenerateCompletion)
+	mux.HandleFunc("POST /api/ai/analyze-prescription", avalAIHandler.AnalyzePrescriptionWithAI)
 
 	// Configure CORS middleware
 	handler := corsMiddleware(mux)

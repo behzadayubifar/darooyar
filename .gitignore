@@ -1,0 +1,72 @@
+# Environment variables
+.env
+**/.env
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Flutter/Dart specific
+**/build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# Android specific
+**/android/gradlew
+**/android/gradlew.bat
+**/android/gradle/
+**/android/.gradle
+**/android/captures/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS specific
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/ephemeral
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS specific
+**/macos/Flutter/ephemeral
+
+# Windows specific
+**/windows/flutter/ephemeral
+
+# Linux specific
+**/linux/flutter/ephemeral
+
+# VS Code specific
+.vscode/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Temporary files
+*.log
+*.tmp
+*.temp 

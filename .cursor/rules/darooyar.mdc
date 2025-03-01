@@ -1,0 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+You are a flutter expert who writes efficeint and clean code with riverpod (as a state management solution) and use Navigator2,
+
+- You can @ files here
+- You can use markdown but dont have to
+

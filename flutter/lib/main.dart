@@ -3,9 +3,21 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/database_service.dart';
+import 'core/utils/message_migration_service.dart';
 import 'features/prescription/presentation/screens/home_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize database service
+  final databaseService = DatabaseService();
+
+  // Run migration service
+  final migrationService =
+      MessageMigrationService(databaseService: databaseService);
+  await migrationService.migrateAIMessages();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/message_formatter.dart';
 import 'expandable_panel.dart';
 
 class StructuredMedicationInfo extends StatelessWidget {
@@ -13,8 +14,11 @@ class StructuredMedicationInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Format the content if needed
+    final formattedContent = MessageFormatter.formatAIMessage(content);
+
     // Check if the content follows the structured format
-    if (!content.contains('-next-')) {
+    if (!MessageFormatter.isStructuredFormat(formattedContent)) {
       // If not structured, return the original content
       return Text(
         content,
@@ -26,7 +30,7 @@ class StructuredMedicationInfo extends StatelessWidget {
     }
 
     // Parse the structured content
-    final parts = content.split('-next-');
+    final parts = formattedContent.split('-next-');
     if (parts.length != 2) {
       return Text(
         content,

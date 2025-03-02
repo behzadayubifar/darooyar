@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/utils/api_client.dart';
 import '../../../../core/utils/database_service.dart';
+import '../../../../core/utils/message_migration_service.dart';
 import '../../data/repositories/prescription_repository.dart';
 import '../../domain/entities/prescription_entity.dart';
 import '../../domain/entities/prescription_message_entity.dart';
@@ -18,6 +19,13 @@ ApiClient apiClient(ApiClientRef ref) {
 @riverpod
 DatabaseService databaseService(DatabaseServiceRef ref) {
   return DatabaseService();
+}
+
+@riverpod
+MessageMigrationService messageMigrationService(
+    MessageMigrationServiceRef ref) {
+  final databaseService = ref.watch(databaseServiceProvider);
+  return MessageMigrationService(databaseService: databaseService);
 }
 
 // Repository provider

@@ -35,6 +35,24 @@ final databaseServiceProvider = AutoDisposeProvider<DatabaseService>.internal(
 );
 
 typedef DatabaseServiceRef = AutoDisposeProviderRef<DatabaseService>;
+String _$messageMigrationServiceHash() =>
+    r'eba5fea57d5de2c16b2005a39136ede0a78db565';
+
+/// See also [messageMigrationService].
+@ProviderFor(messageMigrationService)
+final messageMigrationServiceProvider =
+    AutoDisposeProvider<MessageMigrationService>.internal(
+  messageMigrationService,
+  name: r'messageMigrationServiceProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$messageMigrationServiceHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef MessageMigrationServiceRef
+    = AutoDisposeProviderRef<MessageMigrationService>;
 String _$prescriptionRepositoryHash() =>
     r'a638132c7f0c33e02bfddcc648709e1ae4cc319e';
 

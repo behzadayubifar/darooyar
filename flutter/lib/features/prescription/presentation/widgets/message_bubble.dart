@@ -5,6 +5,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/prescription_message_entity.dart';
 import '../providers/prescription_providers.dart';
+import 'structured_medication_info.dart';
 
 class MessageBubble extends HookConsumerWidget {
   final PrescriptionMessageEntity message;
@@ -29,10 +30,12 @@ class MessageBubble extends HookConsumerWidget {
       alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth:
+              MediaQuery.of(context).size.width * (isUserMessage ? 0.75 : 0.9),
         ),
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        padding: const EdgeInsets.all(12),
+        padding:
+            isUserMessage ? const EdgeInsets.all(12) : const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isUserMessage ? AppTheme.primaryColor : AppTheme.cardColor,
           borderRadius: BorderRadius.circular(16),
@@ -62,7 +65,7 @@ class MessageBubble extends HookConsumerWidget {
                 ),
                 autofocus: true,
               )
-            else
+            else if (isUserMessage)
               Text(
                 message.content,
                 style: TextStyle(
@@ -70,7 +73,10 @@ class MessageBubble extends HookConsumerWidget {
                       isUserMessage ? Colors.white : AppTheme.textPrimaryColor,
                   fontSize: 16,
                 ),
-              ),
+              )
+            else
+              // For AI messages, use the structured medication info widget
+              StructuredMedicationInfo(content: message.content),
             const SizedBox(height: 8),
             Row(
               mainAxisSize: MainAxisSize.min,

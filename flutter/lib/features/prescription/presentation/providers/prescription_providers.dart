@@ -1,22 +1,28 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/utils/api_client.dart';
 import '../../../../core/utils/database_service.dart';
 import '../../data/repositories/prescription_repository.dart';
 import '../../domain/entities/prescription_entity.dart';
 import '../../domain/entities/prescription_message_entity.dart';
 
-// Service providers
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient();
-});
+part 'prescription_providers.g.dart';
 
-final databaseServiceProvider = Provider<DatabaseService>((ref) {
+// Service providers
+@riverpod
+ApiClient apiClient(ApiClientRef ref) {
+  return ApiClient();
+}
+
+@riverpod
+DatabaseService databaseService(DatabaseServiceRef ref) {
   return DatabaseService();
-});
+}
 
 // Repository provider
-final prescriptionRepositoryProvider = Provider<PrescriptionRepository>((ref) {
+@riverpod
+PrescriptionRepository prescriptionRepository(PrescriptionRepositoryRef ref) {
   final apiClient = ref.watch(apiClientProvider);
   final databaseService = ref.watch(databaseServiceProvider);
 
@@ -24,19 +30,31 @@ final prescriptionRepositoryProvider = Provider<PrescriptionRepository>((ref) {
     apiClient: apiClient,
     databaseService: databaseService,
   );
-});
+}
 
 // State providers
-final prescriptionsProvider =
-    FutureProvider<List<PrescriptionEntity>>((ref) async {
+@riverpod
+Future<List<PrescriptionEntity>> prescriptions(PrescriptionsRef ref) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   return repository.getAllPrescriptions();
-});
+}
 
-final selectedPrescriptionIdProvider = StateProvider<String?>((ref) => null);
+@riverpod
+class SelectedPrescriptionId extends _$SelectedPrescriptionId {
+  @override
+  String? build() => null;
 
-final selectedPrescriptionProvider =
-    FutureProvider<PrescriptionEntity?>((ref) async {
+  void select(String? id) {
+    state = id;
+  }
+}
+
+// Simple provider for controlling history panel visibility
+final showHistoryPanelProvider = StateProvider<bool>((ref) => true);
+
+@riverpod
+Future<PrescriptionEntity?> selectedPrescription(
+    SelectedPrescriptionRef ref) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   final prescriptionId = ref.watch(selectedPrescriptionIdProvider);
 
@@ -45,19 +63,20 @@ final selectedPrescriptionProvider =
   }
 
   return repository.getPrescriptionById(prescriptionId);
-});
+}
 
-final prescriptionMessagesProvider =
-    FutureProvider.family<List<PrescriptionMessageEntity>, String>(
-        (ref, prescriptionId) async {
+@riverpod
+Future<List<PrescriptionMessageEntity>> prescriptionMessages(
+    PrescriptionMessagesRef ref, String prescriptionId) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   return repository.getMessagesByPrescriptionId(prescriptionId);
-});
+}
 
 // Action providers
-final createPrescriptionFromTextProvider =
-    FutureProvider.family<PrescriptionEntity, ({String text, String title})>(
-        (ref, params) async {
+@riverpod
+Future<PrescriptionEntity> createPrescriptionFromText(
+    CreatePrescriptionFromTextRef ref,
+    ({String text, String title}) params) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   final prescription =
       await repository.createPrescriptionFromText(params.text, params.title);
@@ -66,14 +85,18 @@ final createPrescriptionFromTextProvider =
   ref.invalidate(prescriptionsProvider);
 
   // Set the newly created prescription as selected
-  ref.read(selectedPrescriptionIdProvider.notifier).state = prescription.id;
+  ref.read(selectedPrescriptionIdProvider.notifier).select(prescription.id);
+
+  // Hide the history panel to show the chat
+  ref.read(showHistoryPanelProvider.notifier).state = false;
 
   return prescription;
-});
+}
 
-final createPrescriptionFromImageProvider =
-    FutureProvider.family<PrescriptionEntity, ({File image, String title})>(
-        (ref, params) async {
+@riverpod
+Future<PrescriptionEntity> createPrescriptionFromImage(
+    CreatePrescriptionFromImageRef ref,
+    ({File image, String title}) params) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   final prescription =
       await repository.createPrescriptionFromImage(params.image, params.title);
@@ -82,14 +105,18 @@ final createPrescriptionFromImageProvider =
   ref.invalidate(prescriptionsProvider);
 
   // Set the newly created prescription as selected
-  ref.read(selectedPrescriptionIdProvider.notifier).state = prescription.id;
+  ref.read(selectedPrescriptionIdProvider.notifier).select(prescription.id);
+
+  // Hide the history panel to show the chat
+  ref.read(showHistoryPanelProvider.notifier).state = false;
 
   return prescription;
-});
+}
 
-final sendFollowUpMessageProvider = FutureProvider.family<
-    PrescriptionMessageEntity,
-    ({String prescriptionId, String message})>((ref, params) async {
+@riverpod
+Future<PrescriptionMessageEntity> sendFollowUpMessage(
+    SendFollowUpMessageRef ref,
+    ({String prescriptionId, String message}) params) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   final message = await repository.sendFollowUpMessage(
       params.prescriptionId, params.message);
@@ -98,10 +125,11 @@ final sendFollowUpMessageProvider = FutureProvider.family<
   ref.invalidate(prescriptionMessagesProvider(params.prescriptionId));
 
   return message;
-});
+}
 
-final deletePrescriptionProvider =
-    FutureProvider.family<void, String>((ref, prescriptionId) async {
+@riverpod
+Future<void> deletePrescription(
+    DeletePrescriptionRef ref, String prescriptionId) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   await repository.deletePrescription(prescriptionId);
 
@@ -111,26 +139,26 @@ final deletePrescriptionProvider =
   // Clear the selected prescription if it was deleted
   final selectedId = ref.read(selectedPrescriptionIdProvider);
   if (selectedId == prescriptionId) {
-    ref.read(selectedPrescriptionIdProvider.notifier).state = null;
+    ref.read(selectedPrescriptionIdProvider.notifier).select(null);
   }
-});
+}
 
-final deleteMessageProvider =
-    FutureProvider.family<void, ({String messageId, String prescriptionId})>(
-        (ref, params) async {
+@riverpod
+Future<void> deleteMessage(DeleteMessageRef ref,
+    ({String messageId, String prescriptionId}) params) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   await repository.deleteMessage(params.messageId);
 
   // Refresh the messages list
   ref.invalidate(prescriptionMessagesProvider(params.prescriptionId));
-});
+}
 
-final updateMessageProvider =
-    FutureProvider.family<void, PrescriptionMessageEntity>(
-        (ref, message) async {
+@riverpod
+Future<void> updateMessage(
+    UpdateMessageRef ref, PrescriptionMessageEntity message) async {
   final repository = ref.watch(prescriptionRepositoryProvider);
   await repository.updateMessage(message);
 
   // Refresh the messages list
   ref.invalidate(prescriptionMessagesProvider(message.prescriptionId));
-});
+}

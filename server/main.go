@@ -22,11 +22,12 @@ func main() {
 
 	// Initialize handlers
 	prescriptionHandler := handlers.NewPrescriptionHandler()
-	avalAIHandler := handlers.NewAvalAIHandler()
+	aiHandler := handlers.NewAIHandler()
 
 	// Define API routes
 
 	// Health check endpoint
+
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
 			"status":  "success",
@@ -44,23 +45,28 @@ func main() {
 	mux.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
 
 	// AI endpoints
-	mux.HandleFunc("POST /api/ai/completion", avalAIHandler.GenerateCompletion)
-	mux.HandleFunc("POST /api/ai/analyze-prescription", avalAIHandler.AnalyzePrescriptionWithAI)
+	mux.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)
+	mux.HandleFunc("POST /api/ai/analyze-prescription", aiHandler.AnalyzePrescriptionWithAI)
 
 	// Configure CORS middleware
 	handler := corsMiddleware(mux)
 
 	// Set up the server
+	addr := os.Getenv("SERVER_ADDR")
+	if addr == "" {
+		addr = ":8080" // Default to all interfaces on port 8080
+	}
+
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  180 * time.Second,
 	}
 
 	// Start the server
-	log.Println("Starting دارویار API server on :8080")
+	log.Printf("Starting دارویار API server on %s", addr)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 		os.Exit(1)

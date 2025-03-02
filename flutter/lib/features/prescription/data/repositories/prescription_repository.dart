@@ -70,7 +70,7 @@ class PrescriptionRepository {
     await _databaseService.saveMessage(userMessage);
 
     // Analyze the prescription
-    final response = await _apiClient.analyzePrescriptionText(text);
+    final response = await _apiClient.analyzeAIPrescription(text);
 
     // Create AI response message
     final aiMessageId = _uuid.v4();
@@ -145,7 +145,7 @@ class PrescriptionRepository {
     await _databaseService.saveMessage(userMessage);
 
     // Send to API for analysis
-    final response = await _apiClient.analyzePrescriptionText(message);
+    final response = await _apiClient.analyzeAIPrescription(message);
 
     // Create AI response message
     final aiMessageId = _uuid.v4();

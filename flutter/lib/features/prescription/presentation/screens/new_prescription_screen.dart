@@ -97,10 +97,13 @@ class NewPrescriptionScreen extends HookConsumerWidget {
 
                         isLoading.value = true;
                         try {
-                          await ref.read(createPrescriptionFromTextProvider(
-                              (text: text, title: title)).future);
+                          final prescription = await ref.read(
+                              createPrescriptionFromTextProvider(
+                                  (text: text, title: title)));
                           if (context.mounted) {
-                            Navigator.pop(context);
+                            await Future.delayed(
+                                const Duration(milliseconds: 100));
+                            Navigator.of(context).pop();
                           }
                         } catch (e) {
                           isLoading.value = false;
@@ -124,10 +127,13 @@ class NewPrescriptionScreen extends HookConsumerWidget {
 
                         isLoading.value = true;
                         try {
-                          await ref.read(createPrescriptionFromImageProvider(
-                              (image: image, title: title)).future);
+                          final prescription = await ref.read(
+                              createPrescriptionFromImageProvider(
+                                  (image: image, title: title)));
                           if (context.mounted) {
-                            Navigator.pop(context);
+                            await Future.delayed(
+                                const Duration(milliseconds: 100));
+                            Navigator.of(context).pop();
                           }
                         } catch (e) {
                           isLoading.value = false;

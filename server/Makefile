@@ -28,10 +28,10 @@ build:
 
 # Run the server
 .PHONY: run
-run: build
+run:
 	@echo Starting Darooyar server...
 ifeq ($(OS),Windows_NT)
-	cmd /c start $(BINARY_NAME)$(BINARY_EXT)
+	$(BINARY_NAME)$(BINARY_EXT)
 else
 	./$(BINARY_NAME)$(BINARY_EXT)
 endif

@@ -16,7 +16,7 @@ The project consists of two main components:
 - Flutter SDK
 - Go 1.16 or higher
 - Git
-- Aval AI API Key (for AI-powered features)
+- OpenAI API Key (for AI-powered features)
 
 ### Installation
 
@@ -34,11 +34,10 @@ The project consists of two main components:
    go mod download
    ```
 
-   Create a `.env` file in the server directory with your Aval AI API key:
+   Create a `.env` file in the server directory with your OpenAI API key:
 
    ```
-   AVALAI_API_KEY=your_avalai_api_key_here
-   AVALAI_API_BASE_URL=https://api.avalai.ir/v1
+   OPENAI_API_KEY=your_openai_api_key_here
    ```
 
 3. Set up the Flutter app:

@@ -20,6 +20,7 @@ class HomeScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prescriptionsAsync = ref.watch(prescriptionsProvider);
     final selectedPrescriptionId = ref.watch(selectedPrescriptionIdProvider);
+    final showHistoryPanel = ref.watch(showHistoryPanelProvider);
 
     final messageController = useTextEditingController();
     final scrollController = useScrollController();
@@ -44,127 +45,158 @@ class HomeScreen extends HookConsumerWidget {
       return null;
     }, [selectedPrescriptionId]);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(AppStrings.appName),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NewPrescriptionScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: prescriptionsAsync.when(
-        data: (prescriptions) {
-          if (prescriptions.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.medical_information,
-                    size: 80,
-                    color: AppTheme.primaryColor,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    AppStrings.noHistoryMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const NewPrescriptionScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add),
-                    label: Text(AppStrings.newPrescription),
-                  ),
-                ],
-              ),
-            );
-          }
+    // Hide history panel when a prescription is selected
+    useEffect(() {
+      if (selectedPrescriptionId != null) {
+        Future.microtask(() {
+          ref.read(showHistoryPanelProvider.notifier).state = false;
+        });
+      }
+      return null;
+    }, [selectedPrescriptionId]);
 
-          return Row(
-            children: [
-              // Prescription list (left panel)
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.35,
+    // Handle back button press
+    Future<bool> handleBackPress() async {
+      if (selectedPrescriptionId != null) {
+        // If a prescription is selected, clear it and show history panel
+        ref.read(selectedPrescriptionIdProvider.notifier).select(null);
+        // Use Future.microtask to avoid updating state during build
+        Future.microtask(() {
+          ref.read(showHistoryPanelProvider.notifier).state = true;
+        });
+        return false; // Prevent default back behavior
+      }
+      return true; // Allow default back behavior (exit app)
+    }
+
+    return WillPopScope(
+      onWillPop: handleBackPress,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(AppStrings.appName),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NewPrescriptionScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        body: prescriptionsAsync.when(
+          data: (prescriptions) {
+            if (prescriptions.isEmpty) {
+              return Center(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      color: AppTheme.backgroundColor,
-                      child: Text(
-                        AppStrings.prescriptionHistory,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
+                    const Icon(
+                      Icons.medical_information,
+                      size: 80,
+                      color: AppTheme.primaryColor,
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: prescriptions.length,
-                        itemBuilder: (context, index) {
-                          final prescription = prescriptions[index];
-                          final isSelected =
-                              prescription.id == selectedPrescriptionId;
-
-                          return PrescriptionListItem(
-                            prescription: prescription,
-                            isSelected: isSelected,
-                          );
-                        },
-                      ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      AppStrings.noHistoryMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NewPrescriptionScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.add),
+                      label: Text(AppStrings.newPrescription),
                     ),
                   ],
                 ),
-              ),
+              );
+            }
 
-              // Vertical divider
-              Container(
-                width: 1,
-                color: AppTheme.dividerColor,
-              ),
-
-              // Chat panel (right panel)
-              Expanded(
-                child: selectedPrescriptionId == null
-                    ? Center(
-                        child: Text(
-                          AppStrings.selectPrescription,
-                          style: const TextStyle(
-                            color: AppTheme.textSecondaryColor,
+            return Row(
+              children: [
+                // Prescription list (left panel) - conditionally show based on showHistoryPanel
+                if (showHistoryPanel)
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.4,
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 16, horizontal: 8),
+                          color: AppTheme.backgroundColor,
+                          child: Text(
+                            AppStrings.prescriptionHistory,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      )
-                    : _buildChatPanel(
-                        context,
-                        ref,
-                        selectedPrescriptionId,
-                        scrollController,
-                        messageController,
-                      ),
-              ),
-            ],
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Text('${AppStrings.errorDisplay}${error.toString()}'),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: prescriptions.length,
+                            itemBuilder: (context, index) {
+                              final prescription = prescriptions[index];
+                              final isSelected =
+                                  prescription.id == selectedPrescriptionId;
+
+                              return PrescriptionListItem(
+                                prescription: prescription,
+                                isSelected: isSelected,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Vertical divider - only show when history panel is visible
+                if (showHistoryPanel)
+                  Container(
+                    width: 1,
+                    color: AppTheme.dividerColor,
+                  ),
+
+                // Chat panel (right panel)
+                Expanded(
+                  child: selectedPrescriptionId == null
+                      ? Center(
+                          child: Text(
+                            AppStrings.selectPrescription,
+                            style: const TextStyle(
+                              color: AppTheme.textSecondaryColor,
+                            ),
+                          ),
+                        )
+                      : _buildChatPanel(
+                          context,
+                          ref,
+                          selectedPrescriptionId,
+                          scrollController,
+                          messageController,
+                        ),
+                ),
+              ],
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(
+            child: Text('${AppStrings.errorDisplay}${error.toString()}'),
+          ),
         ),
       ),
     );
@@ -180,6 +212,7 @@ class HomeScreen extends HookConsumerWidget {
     final selectedPrescriptionAsync = ref.watch(selectedPrescriptionProvider);
     final messagesAsync =
         ref.watch(prescriptionMessagesProvider(prescriptionId));
+    final showHistoryPanel = ref.watch(showHistoryPanelProvider);
 
     return Column(
       children: [
@@ -195,6 +228,36 @@ class HomeScreen extends HookConsumerWidget {
               color: AppTheme.backgroundColor,
               child: Row(
                 children: [
+                  // History toggle button
+                  IconButton(
+                    icon: Icon(
+                      showHistoryPanel ? Icons.menu_open : Icons.menu,
+                      color: AppTheme.primaryColor,
+                    ),
+                    onPressed: () {
+                      ref.read(showHistoryPanelProvider.notifier).state =
+                          !showHistoryPanel;
+                    },
+                    tooltip: showHistoryPanel
+                        ? 'Hide prescription history'
+                        : 'Show prescription history',
+                  ),
+                  // Back button
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: AppTheme.primaryColor,
+                    ),
+                    onPressed: () {
+                      // Clear selected prescription
+                      ref
+                          .read(selectedPrescriptionIdProvider.notifier)
+                          .select(null);
+                      // Show history panel
+                      ref.read(showHistoryPanelProvider.notifier).state = true;
+                    },
+                    tooltip: 'Back to prescription list',
+                  ),
                   Expanded(
                     child: Text(
                       prescription.title,

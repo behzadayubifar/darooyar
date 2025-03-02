@@ -11,8 +11,8 @@ class ApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 300),
+        receiveTimeout: const Duration(seconds: 300),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -62,6 +62,23 @@ class ApiClient {
       final response = await _dio.post(
         AppConstants.prescriptionImageAnalysisEndpoint,
         data: formData,
+      );
+
+      return response.data;
+    } on DioException catch (e) {
+      _handleDioError(e);
+      rethrow;
+    } catch (e) {
+      throw Exception(AppStrings.unknownErrorMessage);
+    }
+  }
+
+  // Method to analyze prescription using AI
+  Future<Map<String, dynamic>> analyzeAIPrescription(String text) async {
+    try {
+      final response = await _dio.post(
+        AppConstants.aiPrescriptionAnalysisEndpoint,
+        data: {'text': text},
       );
 
       return response.data;

@@ -1,10 +1,13 @@
 class AppConstants {
   // API endpoints
-  static const String baseUrl = 'http://localhost:8080/api';
+  // static const String baseUrl = 'https://darooyab.liara.run/api';
+  static const String baseUrl = 'http://192.168.233.83:8080/api';
   static const String prescriptionTextAnalysisEndpoint =
       '/analyze-prescription/text';
   static const String prescriptionImageAnalysisEndpoint =
       '/analyze-prescription/image';
+  static const String aiPrescriptionAnalysisEndpoint =
+      '/ai/analyze-prescription';
 
   // API keys
   static const String apiKey = 'YOUR_API_KEY';

@@ -30,6 +30,7 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   late Animation<Color?> _headerColor;
   late Animation<Color?> _iconColor;
   late Animation<Color?> _titleColor;
+  late Animation<double> _elevation;
   bool _isExpanded = false;
 
   @override
@@ -43,12 +44,14 @@ class _ExpandablePanelState extends State<ExpandablePanel>
     _heightFactor = _controller.drive(CurveTween(curve: Curves.easeInOut));
     _iconTurns = _controller.drive(Tween<double>(begin: 0.0, end: 0.5)
         .chain(CurveTween(curve: Curves.easeInOut)));
-    _borderRadius = _controller.drive(Tween<double>(begin: 12.0, end: 12.0)
+    _borderRadius = _controller.drive(Tween<double>(begin: 16.0, end: 16.0)
+        .chain(CurveTween(curve: Curves.easeInOut)));
+    _elevation = _controller.drive(Tween<double>(begin: 2.0, end: 4.0)
         .chain(CurveTween(curve: Curves.easeInOut)));
 
     _headerColor = _controller.drive(ColorTween(
       begin: widget.color.withOpacity(0.1),
-      end: widget.color.withOpacity(0.2),
+      end: widget.color,
     ).chain(CurveTween(curve: Curves.easeInOut)));
 
     _iconColor = _controller.drive(ColorTween(
@@ -87,15 +90,16 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   }
 
   Widget _buildChildren(BuildContext context, Widget? child) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(_borderRadius.value),
         boxShadow: [
           BoxShadow(
-            color: widget.color.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: widget.color.withOpacity(_isExpanded ? 0.2 : 0.1),
+            blurRadius: _isExpanded ? 8 : 4,
+            offset: Offset(0, _isExpanded ? 3 : 2),
           ),
         ],
       ),
@@ -103,11 +107,14 @@ class _ExpandablePanelState extends State<ExpandablePanel>
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(_borderRadius.value),
         clipBehavior: Clip.antiAlias,
+        elevation: 0,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             InkWell(
               onTap: _handleTap,
+              splashColor: widget.color.withOpacity(0.3),
+              highlightColor: widget.color.withOpacity(0.2),
               child: AnimatedBuilder(
                 animation: _controller.view,
                 builder: (BuildContext context, Widget? _) {
@@ -125,10 +132,19 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: <Widget>[
-                          Icon(
-                            widget.icon,
-                            color: _isExpanded ? Colors.white : widget.color,
-                            size: 24,
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: _isExpanded
+                                  ? Colors.white.withOpacity(0.2)
+                                  : widget.color.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              widget.icon,
+                              color: _isExpanded ? Colors.white : widget.color,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -142,11 +158,23 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                               ),
                             ),
                           ),
-                          RotationTransition(
-                            turns: _iconTurns,
-                            child: Icon(
-                              Icons.keyboard_arrow_down,
-                              color: _isExpanded ? Colors.white : widget.color,
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            decoration: BoxDecoration(
+                              color: _isExpanded
+                                  ? Colors.white.withOpacity(0.2)
+                                  : widget.color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: RotationTransition(
+                              turns: _iconTurns,
+                              child: Icon(
+                                Icons.keyboard_arrow_down,
+                                color:
+                                    _isExpanded ? Colors.white : widget.color,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ],
@@ -191,13 +219,43 @@ class _ExpandablePanelState extends State<ExpandablePanel>
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  widget.content,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    height: 1.5,
-                    color: AppTheme.textPrimaryColor,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.content,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        height: 1.5,
+                        color: AppTheme.textPrimaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _handleTap,
+                        icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                        label: Text(
+                          'بستن',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.color,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          backgroundColor: widget.color.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

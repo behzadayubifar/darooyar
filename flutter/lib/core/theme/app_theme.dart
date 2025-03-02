@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  // Updated color palette for a more modern look
   static const Color primaryColor = Color(0xFF4A6FE5);
   static const Color secondaryColor = Color(0xFF2A3F77);
   static const Color accentColor = Color(0xFF6C8EFF);
@@ -11,6 +12,11 @@ class AppTheme {
   static const Color textPrimaryColor = Color(0xFF212121);
   static const Color textSecondaryColor = Color(0xFF757575);
   static const Color dividerColor = Color(0xFFEEEEEE);
+
+  // New colors for enhanced UI
+  static const Color surfaceColor = Color(0xFFF0F4FF);
+  static const Color shadowColor = Color(0x1A000000);
+  static const Color highlightColor = Color(0xFFE3EAFF);
 
   // Persian font family
   static const String persianFontFamily = 'Vazirmatn';
@@ -23,29 +29,34 @@ class AppTheme {
         primary: primaryColor,
         secondary: secondaryColor,
         background: backgroundColor,
+        surface: surfaceColor,
         error: errorColor,
         brightness: Brightness.light,
       ),
       scaffoldBackgroundColor: backgroundColor,
       fontFamily: persianFontFamily,
-      cardTheme: const CardTheme(
+      cardTheme: CardTheme(
         color: cardColor,
-        elevation: 2,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.circular(16),
         ),
+        shadowColor: shadowColor,
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: backgroundColor,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: TextStyle(
+        titleTextStyle: const TextStyle(
           color: textPrimaryColor,
           fontSize: 20,
           fontWeight: FontWeight.bold,
           fontFamily: persianFontFamily,
         ),
-        iconTheme: IconThemeData(color: primaryColor),
+        iconTheme: const IconThemeData(color: primaryColor),
+        shadowColor: shadowColor,
+        surfaceTintColor: Colors.transparent,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -92,15 +103,15 @@ class AppTheme {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: dividerColor),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: dividerColor),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryColor),
+          borderSide: const BorderSide(color: primaryColor, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -154,6 +165,22 @@ class AppTheme {
         color: dividerColor,
         thickness: 1,
         space: 1,
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        shape: CircleBorder(),
+      ),
+      iconTheme: const IconThemeData(
+        color: primaryColor,
+        size: 24,
+      ),
+      listTileTheme: const ListTileThemeData(
+        tileColor: cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
       ),
     );
   }

@@ -228,7 +228,7 @@ func (h *AIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http.Req
 	// If there's an error, try with a different model as fallback
 	if err != nil {
 		log.Printf("Error calling OpenAI API with gemini-2.0-flash-thinking-exp-01-21: %v", err)
-		log.Println("Trying fallback model GPT3Ada...")
+		log.Println("Trying fallback with same model but different parameters...")
 
 		// Create a new context for the fallback request
 		fallbackCtx, fallbackCancel = context.WithTimeout(context.Background(), 30*time.Second)
@@ -237,7 +237,7 @@ func (h *AIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http.Req
 		resp, err = h.client.CreateChatCompletion(
 			fallbackCtx,
 			openai.ChatCompletionRequest{
-				Model: openai.GPT3Ada, // Try with a simpler model
+				Model: "gemini-2.0-flash-thinking-exp-01-21", // Use the same model for fallback
 				Messages: []openai.ChatCompletionMessage{
 					{
 						Role:    openai.ChatMessageRoleSystem,

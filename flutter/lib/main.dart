@@ -4,8 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
-import 'core/utils/database_service.dart';
-import 'core/utils/message_migration_service.dart';
+import 'features/prescription/presentation/providers/prescription_providers.dart';
 import 'features/prescription/presentation/screens/home_screen.dart';
 import 'features/prescription/presentation/screens/splash_screen.dart';
 
@@ -28,13 +27,15 @@ void main() async {
     ),
   );
 
-  // Initialize database service
-  final databaseService = DatabaseService();
+  // Create a ProviderContainer to access providers before runApp
+  final container = ProviderContainer();
 
-  // Run migration service
-  final migrationService =
-      MessageMigrationService(databaseService: databaseService);
+  // Run migration service using the provider
+  final migrationService = container.read(messageMigrationServiceProvider);
   await migrationService.migrateAIMessages();
+
+  // Dispose the container after using it
+  container.dispose();
 
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -60,6 +61,12 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
     );
   }
 }

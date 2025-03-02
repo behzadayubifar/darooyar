@@ -100,7 +100,17 @@ class HomeScreen extends HookConsumerWidget {
         appBar: AppBar(
           title: const Text(AppStrings.appName),
           elevation: 0,
+          centerTitle: false,
+          titleSpacing: 8,
           actions: [
+            // Always show history button in app bar
+            IconButton(
+              icon: const Icon(Icons.history),
+              onPressed: () {
+                ref.read(showHistoryPanelProvider.notifier).state = true;
+              },
+              tooltip: AppStrings.prescriptionHistory,
+            ),
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: () {
@@ -121,129 +131,215 @@ class HomeScreen extends HookConsumerWidget {
               return _buildEmptyState(context);
             }
 
-            return Row(
+            return Column(
               children: [
-                // Prescription list (left panel) - conditionally show based on showHistoryPanel
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: showHistoryPanel
-                      ? MediaQuery.of(context).size.width * 0.4
-                      : 0,
-                  curve: Curves.easeInOut,
-                  child: showHistoryPanel
-                      ? Container(
+                // Help text at the top
+                Visibility(
+                  visible: selectedPrescriptionId == null && !showHistoryPanel,
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: AppTheme.primaryColor.withOpacity(0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.shadowColor,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: AppTheme.cardColor,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.shadowColor,
-                                blurRadius: 5,
-                                offset: const Offset(2, 0),
-                              ),
-                            ],
+                            color: AppTheme.primaryColor.withOpacity(0.2),
+                            shape: BoxShape.circle,
                           ),
-                          child: Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 16, horizontal: 8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.backgroundColor,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppTheme.shadowColor,
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.history,
-                                      size: 18,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      AppStrings.prescriptionHistory,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: AnimationLimiter(
-                                  child: ListView.builder(
-                                    itemCount: prescriptions.length,
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 8),
-                                    itemBuilder: (context, index) {
-                                      final prescription = prescriptions[index];
-                                      final isSelected = prescription.id ==
-                                          selectedPrescriptionId;
-
-                                      return AnimationConfiguration
-                                          .staggeredList(
-                                        position: index,
-                                        duration:
-                                            const Duration(milliseconds: 375),
-                                        child: SlideAnimation(
-                                          verticalOffset: 50.0,
-                                          child: FadeInAnimation(
-                                            child: PrescriptionListItem(
-                                              prescription: prescription,
-                                              isSelected: isSelected,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
+                          child: Icon(
+                            Icons.info_outline,
+                            color: AppTheme.primaryColor,
+                            size: 24,
                           ),
-                        )
-                      : null,
-                ),
-
-                // Chat panel (right panel)
-                Expanded(
-                  child: selectedPrescriptionId == null
-                      ? Center(
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                Icons.chat_outlined,
-                                size: 64,
-                                color: AppTheme.primaryColor,
-                              ),
-                              const SizedBox(height: 16),
                               Text(
                                 AppStrings.selectPrescription,
                                 style: const TextStyle(
-                                  color: AppTheme.textSecondaryColor,
+                                  color: AppTheme.primaryColor,
                                   fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "برای مشاهده جزئیات و گفتگو، یک نسخه را از فهرست انتخاب کنید",
+                                style: TextStyle(
+                                  color: AppTheme.textSecondaryColor,
+                                  fontSize: 14,
+                                ),
                               ),
                             ],
                           ),
-                        )
-                      : _buildChatPanel(
-                          context,
-                          ref,
-                          selectedPrescriptionId,
-                          scrollController,
-                          messageController,
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Main content area with history panel and chat
+                Expanded(
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Prescription list (left panel) - conditionally show based on showHistoryPanel
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: showHistoryPanel
+                              ? MediaQuery.of(context).size.width * 0.9
+                              : 0,
+                          curve: Curves.easeInOut,
+                          child: showHistoryPanel
+                              ? Container(
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.cardColor,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.shadowColor,
+                                        blurRadius: 5,
+                                        offset: const Offset(2, 0),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 16, horizontal: 16),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.backgroundColor,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppTheme.shadowColor,
+                                              blurRadius: 2,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.history,
+                                                    size: 20,
+                                                    color:
+                                                        AppTheme.primaryColor,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Flexible(
+                                                    child: Text(
+                                                      AppStrings
+                                                          .prescriptionHistory,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 18,
+                                                      ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.close,
+                                                color:
+                                                    AppTheme.textSecondaryColor,
+                                              ),
+                                              onPressed: () {
+                                                ref
+                                                    .read(
+                                                        showHistoryPanelProvider
+                                                            .notifier)
+                                                    .state = false;
+                                              },
+                                              tooltip: 'Close history panel',
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: AnimationLimiter(
+                                          child: ListView.builder(
+                                            itemCount: prescriptions.length,
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            itemBuilder: (context, index) {
+                                              final prescription =
+                                                  prescriptions[index];
+                                              final isSelected =
+                                                  prescription.id ==
+                                                      selectedPrescriptionId;
+
+                                              return AnimationConfiguration
+                                                  .staggeredList(
+                                                position: index,
+                                                duration: const Duration(
+                                                    milliseconds: 375),
+                                                child: SlideAnimation(
+                                                  verticalOffset: 50.0,
+                                                  child: FadeInAnimation(
+                                                    child: PrescriptionListItem(
+                                                      prescription:
+                                                          prescription,
+                                                      isSelected: isSelected,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : null,
+                        ),
+
+                        // Chat panel (right panel)
+                        if (!showHistoryPanel)
+                          Expanded(
+                            child: selectedPrescriptionId == null
+                                ? Container() // Empty container instead of the icon
+                                : _buildChatPanel(
+                                    context,
+                                    ref,
+                                    selectedPrescriptionId,
+                                    scrollController,
+                                    messageController,
+                                  ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             );
@@ -289,6 +385,7 @@ class HomeScreen extends HookConsumerWidget {
                 label: Text(AppStrings.newPrescription),
               );
             }
+            // Remove the history button FAB
             return null;
           },
           orElse: () => null,
@@ -382,322 +479,494 @@ class HomeScreen extends HookConsumerWidget {
         ref.watch(prescriptionMessagesProvider(prescriptionId));
     final showHistoryPanel = ref.watch(showHistoryPanelProvider);
 
-    return Column(
-      children: [
-        // Prescription title
-        selectedPrescriptionAsync.when(
-          data: (prescription) {
-            if (prescription == null) {
-              return const SizedBox.shrink();
-            }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Prescription title
+            selectedPrescriptionAsync.when(
+              data: (prescription) {
+                if (prescription == null) {
+                  return const SizedBox.shrink();
+                }
 
-            return Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.shadowColor,
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // For very narrow widths, use a more compact layout
+                      if (constraints.maxWidth < 150) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Back button only for very narrow widths
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: AppTheme.primaryColor,
+                                  size: 16,
+                                ),
+                                onPressed: () {
+                                  // Clear selected prescription
+                                  ref
+                                      .read(selectedPrescriptionIdProvider
+                                          .notifier)
+                                      .select(null);
+                                  // Show history panel
+                                  ref
+                                      .read(showHistoryPanelProvider.notifier)
+                                      .state = true;
+                                },
+                                tooltip: 'Back to prescription list',
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                iconSize: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                prescription.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      // For normal widths, use the standard layout
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // History toggle button
+                          SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: IconButton(
+                              icon: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (Widget child,
+                                    Animation<double> animation) {
+                                  return RotationTransition(
+                                    turns: Tween<double>(begin: 0.5, end: 1.0)
+                                        .animate(animation),
+                                    child: ScaleTransition(
+                                      scale: animation,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: Icon(
+                                  showHistoryPanel
+                                      ? Icons.menu_open
+                                      : Icons.menu,
+                                  key: ValueKey<bool>(showHistoryPanel),
+                                  color: AppTheme.primaryColor,
+                                  size: 18,
+                                ),
+                              ),
+                              onPressed: () {
+                                ref
+                                    .read(showHistoryPanelProvider.notifier)
+                                    .state = !showHistoryPanel;
+                              },
+                              tooltip: showHistoryPanel
+                                  ? 'Hide prescription history'
+                                  : 'Show prescription history',
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              iconSize: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          // Back button
+                          SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: AppTheme.primaryColor,
+                                size: 18,
+                              ),
+                              onPressed: () {
+                                // Clear selected prescription
+                                ref
+                                    .read(
+                                        selectedPrescriptionIdProvider.notifier)
+                                    .select(null);
+                                // Show history panel
+                                ref
+                                    .read(showHistoryPanelProvider.notifier)
+                                    .state = true;
+                              },
+                              tooltip: 'Back to prescription list',
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              iconSize: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              prescription.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (prescription.imageUrl != null)
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => Dialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        AppBar(
+                                          title: Text(
+                                              AppStrings.prescriptionImage),
+                                          automaticallyImplyLeading: false,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: Radius.circular(16),
+                                              topRight: Radius.circular(16),
+                                            ),
+                                          ),
+                                          actions: [
+                                            IconButton(
+                                              icon: const Icon(Icons.close),
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                            ),
+                                          ],
+                                        ),
+                                        ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                          child: SizedBox(
+                                            width: MediaQuery.of(context)
+                                                    .size
+                                                    .width *
+                                                0.8,
+                                            height: MediaQuery.of(context)
+                                                    .size
+                                                    .height *
+                                                0.6,
+                                            child: Image.file(
+                                              File(prescription.imageUrl!),
+                                              fit: BoxFit.contain,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(16),
+                                                  child: Text(AppStrings
+                                                      .errorImageUpload),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Hero(
+                                tag: 'prescription_image_${prescription.id}',
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                        color: AppTheme.dividerColor),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.shadowColor,
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(7),
+                                    child: Image.file(
+                                      File(prescription.imageUrl!),
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return const Icon(
+                                          Icons.image_not_supported,
+                                          size: 16,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+
+            // Messages list
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  borderRadius: BorderRadius.circular(0),
+                ),
+                child: messagesAsync.when(
+                  data: (messages) {
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: constraints.maxHeight * 0.7,
+                          ),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 64,
+                                  color: AppTheme.primaryColor.withOpacity(0.5),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  AppStrings.noPrescriptions,
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondaryColor,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return AnimationLimiter(
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: messages.length,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+
+                          return AnimationConfiguration.staggeredList(
+                            position: index,
+                            duration: const Duration(milliseconds: 375),
+                            child: SlideAnimation(
+                              verticalOffset: 20.0,
+                              child: FadeInAnimation(
+                                child: MessageBubble(
+                                  message: message,
+                                  onDelete: () {
+                                    if (message.type == MessageType.user) {
+                                      ref.read(deleteMessageProvider(
+                                        (
+                                          messageId: message.id,
+                                          prescriptionId: prescriptionId
+                                        ),
+                                      ));
+                                    }
+                                  },
+                                  onEdit: (newContent) {
+                                    if (message.type == MessageType.user) {
+                                      final updatedMessage =
+                                          PrescriptionMessageEntity(
+                                        id: message.id,
+                                        prescriptionId: message.prescriptionId,
+                                        type: message.type,
+                                        content: newContent,
+                                        timestamp: message.timestamp,
+                                      );
+
+                                      ref.read(updateMessageProvider(
+                                          updatedMessage));
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => Center(
+                    child:
+                        Text('${AppStrings.errorDisplay}${error.toString()}'),
+                  ),
+                ),
+              ),
+            ),
+
+            // Message input
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               decoration: BoxDecoration(
                 color: AppTheme.cardColor,
                 boxShadow: [
                   BoxShadow(
                     color: AppTheme.shadowColor,
                     blurRadius: 4,
-                    offset: const Offset(0, 1),
+                    offset: const Offset(0, -1),
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  // History toggle button
-                  IconButton(
-                    icon: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder:
-                          (Widget child, Animation<double> animation) {
-                        return RotationTransition(
-                          turns: Tween<double>(begin: 0.5, end: 1.0)
-                              .animate(animation),
-                          child: ScaleTransition(
-                            scale: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Icon(
-                        showHistoryPanel ? Icons.menu_open : Icons.menu,
-                        key: ValueKey<bool>(showHistoryPanel),
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                    onPressed: () {
-                      ref.read(showHistoryPanelProvider.notifier).state =
-                          !showHistoryPanel;
-                    },
-                    tooltip: showHistoryPanel
-                        ? 'Hide prescription history'
-                        : 'Show prescription history',
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceColor,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Back button
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: AppTheme.primaryColor,
-                    ),
-                    onPressed: () {
-                      // Clear selected prescription
-                      ref
-                          .read(selectedPrescriptionIdProvider.notifier)
-                          .select(null);
-                      // Show history panel
-                      ref.read(showHistoryPanelProvider.notifier).state = true;
-                    },
-                    tooltip: 'Back to prescription list',
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceColor,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      prescription.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  if (prescription.imageUrl != null)
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => Dialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                AppBar(
-                                  title: Text(AppStrings.prescriptionImage),
-                                  automaticallyImplyLeading: false,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      topRight: Radius.circular(16),
-                                    ),
-                                  ),
-                                  actions: [
-                                    IconButton(
-                                      icon: const Icon(Icons.close),
-                                      onPressed: () => Navigator.pop(context),
-                                    ),
-                                  ],
-                                ),
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.only(
-                                    bottomLeft: Radius.circular(16),
-                                    bottomRight: Radius.circular(16),
-                                  ),
-                                  child: Image.file(
-                                    File(prescription.imageUrl!),
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Padding(
-                                        padding: const EdgeInsets.all(16),
-                                        child:
-                                            Text(AppStrings.errorImageUpload),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                      child: Hero(
-                        tag: 'prescription_image_${prescription.id}',
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.dividerColor),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.shadowColor,
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(11),
-                            child: Image.file(
-                              File(prescription.imageUrl!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(Icons.image_not_supported);
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            );
-          },
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const SizedBox.shrink(),
-        ),
-
-        // Messages list
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundColor,
-              borderRadius: BorderRadius.circular(0),
-            ),
-            child: messagesAsync.when(
-              data: (messages) {
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // For very small widths, stack the input and button vertically
+                  if (constraints.maxWidth < 200) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 64,
-                          color: AppTheme.primaryColor.withOpacity(0.5),
+                        TextField(
+                          controller: messageController,
+                          decoration: InputDecoration(
+                            hintText: AppStrings.messageHint,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            filled: true,
+                            fillColor: AppTheme.surfaceColor,
+                            prefixIcon: const Icon(
+                              Icons.chat_bubble_outline,
+                              color: AppTheme.primaryColor,
+                              size: 18,
+                            ),
+                          ),
+                          maxLines: null,
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          AppStrings.noPrescriptions,
-                          style: TextStyle(
-                            color: AppTheme.textSecondaryColor,
-                            fontSize: 16,
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: FloatingActionButton(
+                            onPressed: () {
+                              final message = messageController.text.trim();
+                              if (message.isNotEmpty) {
+                                ref.read(sendFollowUpMessageProvider(
+                                  (
+                                    prescriptionId: prescriptionId,
+                                    message: message
+                                  ),
+                                ));
+                                messageController.clear();
+                              }
+                            },
+                            mini: true,
+                            child: const Icon(Icons.send, size: 18),
                           ),
                         ),
                       ],
-                    ),
-                  );
-                }
+                    );
+                  }
 
-                return AnimationLimiter(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: messages.length,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    itemBuilder: (context, index) {
-                      final message = messages[index];
-
-                      return AnimationConfiguration.staggeredList(
-                        position: index,
-                        duration: const Duration(milliseconds: 375),
-                        child: SlideAnimation(
-                          verticalOffset: 20.0,
-                          child: FadeInAnimation(
-                            child: MessageBubble(
-                              message: message,
-                              onDelete: () {
-                                if (message.type == MessageType.user) {
-                                  ref.read(deleteMessageProvider(
-                                    (
-                                      messageId: message.id,
-                                      prescriptionId: prescriptionId
-                                    ),
-                                  ));
-                                }
-                              },
-                              onEdit: (newContent) {
-                                if (message.type == MessageType.user) {
-                                  final updatedMessage =
-                                      PrescriptionMessageEntity(
-                                    id: message.id,
-                                    prescriptionId: message.prescriptionId,
-                                    type: message.type,
-                                    content: newContent,
-                                    timestamp: message.timestamp,
-                                  );
-
-                                  ref.read(
-                                      updateMessageProvider(updatedMessage));
-                                }
-                              },
+                  // For normal widths, use the horizontal layout
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: messageController,
+                          decoration: InputDecoration(
+                            hintText: AppStrings.messageHint,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            filled: true,
+                            fillColor: AppTheme.surfaceColor,
+                            prefixIcon: const Icon(
+                              Icons.chat_bubble_outline,
+                              color: AppTheme.primaryColor,
                             ),
                           ),
+                          maxLines: null,
                         ),
-                      );
-                    },
-                  ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(
-                child: Text('${AppStrings.errorDisplay}${error.toString()}'),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: FloatingActionButton(
+                          onPressed: () {
+                            final message = messageController.text.trim();
+                            if (message.isNotEmpty) {
+                              ref.read(sendFollowUpMessageProvider(
+                                (
+                                  prescriptionId: prescriptionId,
+                                  message: message
+                                ),
+                              ));
+                              messageController.clear();
+                            }
+                          },
+                          mini: true,
+                          child: const Icon(Icons.send),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
-          ),
-        ),
-
-        // Message input
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.shadowColor,
-                blurRadius: 4,
-                offset: const Offset(0, -1),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: messageController,
-                  decoration: InputDecoration(
-                    hintText: AppStrings.messageHint,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    filled: true,
-                    fillColor: AppTheme.surfaceColor,
-                    prefixIcon: const Icon(
-                      Icons.chat_bubble_outline,
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                  maxLines: null,
-                ),
-              ),
-              const SizedBox(width: 12),
-              FloatingActionButton(
-                onPressed: () {
-                  final message = messageController.text.trim();
-                  if (message.isNotEmpty) {
-                    ref.read(sendFollowUpMessageProvider(
-                      (prescriptionId: prescriptionId, message: message),
-                    ));
-                    messageController.clear();
-                  }
-                },
-                mini: true,
-                child: const Icon(Icons.send),
-              ),
-            ],
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

@@ -129,56 +129,87 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                           : BorderRadius.circular(_borderRadius.value),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: <Widget>[
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: _isExpanded
-                                  ? Colors.white.withOpacity(0.2)
-                                  : widget.color.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              widget.icon,
-                              color: _isExpanded ? Colors.white : widget.color,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              widget.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color:
-                                    _isExpanded ? Colors.white : widget.color,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 12, horizontal: 10),
+                      child: LayoutBuilder(builder: (context, constraints) {
+                        final bool isNarrow = constraints.maxWidth < 100;
+                        final double iconSize = isNarrow ? 18 : 22;
+                        final double iconInnerSize = isNarrow ? 12 : 14;
+                        final double spacing = isNarrow ? 4 : 8;
+
+                        return Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: spacing,
+                          children: <Widget>[
+                            SizedBox(
+                              width: iconSize,
+                              height: iconSize,
+                              child: Container(
+                                padding: EdgeInsets.all(isNarrow ? 2 : 3),
+                                decoration: BoxDecoration(
+                                  color: _isExpanded
+                                      ? Colors.white.withOpacity(0.2)
+                                      : widget.color.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Icon(
+                                  widget.icon,
+                                  color:
+                                      _isExpanded ? Colors.white : widget.color,
+                                  size: iconInnerSize,
+                                ),
                               ),
                             ),
-                          ),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            decoration: BoxDecoration(
-                              color: _isExpanded
-                                  ? Colors.white.withOpacity(0.2)
-                                  : widget.color.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: RotationTransition(
-                              turns: _iconTurns,
-                              child: Icon(
-                                Icons.keyboard_arrow_down,
-                                color:
-                                    _isExpanded ? Colors.white : widget.color,
-                                size: 20,
+                            Container(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth >
+                                        (iconSize * 2 + spacing * 2 + 20)
+                                    ? constraints.maxWidth -
+                                        (iconSize * 2) -
+                                        (spacing * 2) -
+                                        20
+                                    : constraints.maxWidth * 0.5,
+                              ),
+                              child: Text(
+                                widget.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: isNarrow
+                                      ? 12
+                                      : (constraints.maxWidth < 150 ? 14 : 15),
+                                  color:
+                                      _isExpanded ? Colors.white : widget.color,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                            SizedBox(
+                              width: iconSize,
+                              height: iconSize,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _isExpanded
+                                      ? Colors.white.withOpacity(0.2)
+                                      : widget.color.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                padding: EdgeInsets.all(isNarrow ? 2 : 3),
+                                child: RotationTransition(
+                                  turns: _iconTurns,
+                                  child: Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: _isExpanded
+                                        ? Colors.white
+                                        : widget.color,
+                                    size: iconInnerSize,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
                     ),
                   );
                 },
@@ -231,26 +262,31 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Align(
+                    Container(
                       alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _handleTap,
-                        icon: const Icon(Icons.keyboard_arrow_up, size: 18),
-                        label: Text(
-                          'بستن',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: widget.color,
-                          ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.5,
                         ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
+                        child: TextButton.icon(
+                          onPressed: _handleTap,
+                          icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                          label: Text(
+                            'بستن',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: widget.color,
+                            ),
                           ),
-                          backgroundColor: widget.color.withOpacity(0.1),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            backgroundColor: widget.color.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                       ),

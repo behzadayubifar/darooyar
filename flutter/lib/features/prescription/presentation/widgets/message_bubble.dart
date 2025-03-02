@@ -97,102 +97,117 @@ class MessageBubble extends HookConsumerWidget {
               // Message footer with timestamp and actions
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Timestamp
-                    Text(
-                      '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                        color: isUserMessage
-                            ? Colors.white70
-                            : AppTheme.textSecondaryColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      children: [
+                        // Timestamp
+                        Container(
+                          constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth * 0.3),
+                          child: Text(
+                            '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: isUserMessage
+                                  ? Colors.white70
+                                  : AppTheme.textSecondaryColor,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
 
-                    // Action buttons for user messages
-                    if (isUserMessage &&
-                        (isHovering.value || isEditing.value)) ...[
-                      if (isEditing.value) ...[
-                        // Save button
-                        AnimatedOpacity(
-                          opacity: isEditing.value ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: IconButton(
-                            icon: const Icon(Icons.check, size: 18),
-                            color: Colors.white,
-                            onPressed: () {
-                              onEdit(textController.text);
-                              isEditing.value = false;
-                            },
-                            tooltip: 'Save changes',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 24,
-                              minHeight: 24,
-                            ),
+                        // Action buttons for user messages
+                        if (isUserMessage &&
+                            (isHovering.value || isEditing.value))
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isEditing.value) ...[
+                                // Save button
+                                AnimatedOpacity(
+                                  opacity: isEditing.value ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 200),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.check, size: 18),
+                                    color: Colors.white,
+                                    onPressed: () {
+                                      onEdit(textController.text);
+                                      isEditing.value = false;
+                                    },
+                                    tooltip: 'Save changes',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 24,
+                                      minHeight: 24,
+                                    ),
+                                  ),
+                                ),
+                                // Cancel button
+                                AnimatedOpacity(
+                                  opacity: isEditing.value ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 200),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    color: Colors.white,
+                                    onPressed: () {
+                                      textController.text = message.content;
+                                      isEditing.value = false;
+                                    },
+                                    tooltip: 'Cancel editing',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 24,
+                                      minHeight: 24,
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                // Edit button
+                                AnimatedOpacity(
+                                  opacity: isHovering.value ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 200),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 18),
+                                    color: Colors.white,
+                                    onPressed: () {
+                                      isEditing.value = true;
+                                    },
+                                    tooltip: 'Edit message',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 24,
+                                      minHeight: 24,
+                                    ),
+                                  ),
+                                ),
+                                // Delete button
+                                AnimatedOpacity(
+                                  opacity: isHovering.value ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 200),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.delete_outline,
+                                        size: 18),
+                                    color: Colors.white,
+                                    onPressed: onDelete,
+                                    tooltip: 'Delete message',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 24,
+                                      minHeight: 24,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                        ),
-                        // Cancel button
-                        AnimatedOpacity(
-                          opacity: isEditing.value ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: IconButton(
-                            icon: const Icon(Icons.close, size: 18),
-                            color: Colors.white,
-                            onPressed: () {
-                              textController.text = message.content;
-                              isEditing.value = false;
-                            },
-                            tooltip: 'Cancel editing',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 24,
-                              minHeight: 24,
-                            ),
-                          ),
-                        ),
-                      ] else ...[
-                        // Edit button
-                        AnimatedOpacity(
-                          opacity: isHovering.value ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            color: Colors.white,
-                            onPressed: () {
-                              isEditing.value = true;
-                            },
-                            tooltip: 'Edit message',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 24,
-                              minHeight: 24,
-                            ),
-                          ),
-                        ),
-                        // Delete button
-                        AnimatedOpacity(
-                          opacity: isHovering.value ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            color: Colors.white,
-                            onPressed: onDelete,
-                            tooltip: 'Delete message',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 24,
-                              minHeight: 24,
-                            ),
-                          ),
-                        ),
                       ],
-                    ],
-                  ],
+                    );
+                  },
                 ),
               ),
             ],

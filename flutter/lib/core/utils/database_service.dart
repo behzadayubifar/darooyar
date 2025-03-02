@@ -4,14 +4,36 @@ import '../../features/prescription/domain/entities/prescription_entity.dart';
 import '../../features/prescription/domain/entities/prescription_message_entity.dart';
 
 class DatabaseService {
+  // Singleton instance
+  static DatabaseService? _instance;
+
+  // Shared database future
   late Future<Isar> db;
 
-  DatabaseService() {
+  // Factory constructor to return the singleton instance
+  factory DatabaseService() {
+    _instance ??= DatabaseService._internal();
+    return _instance!;
+  }
+
+  // Private constructor for singleton
+  DatabaseService._internal() {
     db = openDatabase();
   }
 
   Future<Isar> openDatabase() async {
     final dir = await getApplicationDocumentsDirectory();
+
+    // Check if an instance is already open for this directory
+    if (Isar.instanceNames.isNotEmpty) {
+      try {
+        // Try to get the existing instance
+        return Future.value(Isar.getInstance()!);
+      } catch (e) {
+        // If getting the instance fails, open a new one
+      }
+    }
+
     return Isar.open(
       [PrescriptionEntitySchema, PrescriptionMessageEntitySchema],
       directory: dir.path,

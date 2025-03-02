@@ -26,7 +26,7 @@ class PrescriptionListItem extends HookConsumerWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: isSelected
             ? AppTheme.primaryColor.withOpacity(0.1)
@@ -62,14 +62,14 @@ class PrescriptionListItem extends HookConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               children: [
                 // Prescription image or icon
                 Hero(
                   tag: 'prescription_list_${prescription.id}',
                   child: Container(
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       color: prescription.imageUrl == null
                           ? AppTheme.primaryColor.withOpacity(0.1)
@@ -91,7 +91,7 @@ class PrescriptionListItem extends HookConsumerWidget {
                                   color: AppTheme.dividerColor,
                                   child: const Icon(
                                     Icons.image_not_supported,
-                                    size: 18,
+                                    size: 22,
                                     color: AppTheme.textSecondaryColor,
                                   ),
                                 );
@@ -101,7 +101,7 @@ class PrescriptionListItem extends HookConsumerWidget {
                         : const Icon(
                             Icons.description,
                             color: AppTheme.primaryColor,
-                            size: 24,
+                            size: 28,
                           ),
                   ),
                 ),
@@ -117,7 +117,7 @@ class PrescriptionListItem extends HookConsumerWidget {
                         prescription.title,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 16,
                           color: isSelected
                               ? AppTheme.primaryColor
                               : AppTheme.textPrimaryColor,
@@ -125,23 +125,25 @@ class PrescriptionListItem extends HookConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Icon(
                             Icons.calendar_today,
-                            size: 12,
+                            size: 14,
                             color: AppTheme.textSecondaryColor,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            dateFormat.format(prescription.createdAt),
-                            style: TextStyle(
-                              color: AppTheme.textSecondaryColor,
-                              fontSize: 12,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              dateFormat.format(prescription.createdAt),
+                              style: TextStyle(
+                                color: AppTheme.textSecondaryColor,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -153,43 +155,44 @@ class PrescriptionListItem extends HookConsumerWidget {
                 AnimatedOpacity(
                   opacity: isHovering.value ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 200),
-                  child: IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    color: AppTheme.errorColor,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    tooltip: AppStrings.delete,
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(AppStrings.deletePrescription),
-                          content:
-                              Text(AppStrings.deletePrescriptionConfirmation),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text(AppStrings.cancel),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                ref.read(deletePrescriptionProvider(
-                                    prescription.id));
-                              },
-                              child: Text(
-                                AppStrings.delete,
-                                style:
-                                    const TextStyle(color: AppTheme.errorColor),
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      color: AppTheme.errorColor,
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: AppStrings.delete,
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(AppStrings.deletePrescription),
+                            content:
+                                Text(AppStrings.deletePrescriptionConfirmation),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text(AppStrings.cancel),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  ref.read(deletePrescriptionProvider(
+                                      prescription.id));
+                                },
+                                child: Text(
+                                  AppStrings.delete,
+                                  style: const TextStyle(
+                                      color: AppTheme.errorColor),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

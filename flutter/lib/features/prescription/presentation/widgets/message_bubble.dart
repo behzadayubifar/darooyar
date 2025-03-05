@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive_size.dart';
 import '../../domain/entities/prescription_message_entity.dart';
 import '../providers/prescription_providers.dart';
 import 'structured_medication_info.dart';
@@ -34,27 +35,28 @@ class MessageBubble extends HookConsumerWidget {
         onExit: (_) => isHovering.value = false,
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width *
-                (isUserMessage ? 0.75 : 0.9),
+            maxWidth: ResponsiveSize.width(isUserMessage ? 75 : 90),
           ),
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          margin: EdgeInsets.symmetric(
+              vertical: ResponsiveSize.vertical(1),
+              horizontal: ResponsiveSize.horizontal(4)),
           decoration: BoxDecoration(
             color: isUserMessage ? AppTheme.primaryColor : AppTheme.cardColor,
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
+              topLeft: Radius.circular(ResponsiveSize.size(20)),
+              topRight: Radius.circular(ResponsiveSize.size(20)),
               bottomLeft: isUserMessage
-                  ? const Radius.circular(20)
-                  : const Radius.circular(4),
+                  ? Radius.circular(ResponsiveSize.size(20))
+                  : Radius.circular(ResponsiveSize.size(4)),
               bottomRight: isUserMessage
-                  ? const Radius.circular(4)
-                  : const Radius.circular(20),
+                  ? Radius.circular(ResponsiveSize.size(4))
+                  : Radius.circular(ResponsiveSize.size(20)),
             ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                blurRadius: ResponsiveSize.size(8),
+                offset: Offset(0, ResponsiveSize.size(2)),
               ),
             ],
           ),
@@ -64,8 +66,16 @@ class MessageBubble extends HookConsumerWidget {
               // Message content
               Padding(
                 padding: isUserMessage
-                    ? const EdgeInsets.fromLTRB(16, 16, 16, 8)
-                    : const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    ? EdgeInsets.fromLTRB(
+                        ResponsiveSize.horizontal(4),
+                        ResponsiveSize.vertical(2),
+                        ResponsiveSize.horizontal(4),
+                        ResponsiveSize.vertical(1))
+                    : EdgeInsets.fromLTRB(
+                        ResponsiveSize.horizontal(4),
+                        ResponsiveSize.vertical(2),
+                        ResponsiveSize.horizontal(4),
+                        ResponsiveSize.vertical(1)),
                 child: isEditing.value
                     ? TextField(
                         controller: textController,
@@ -78,16 +88,16 @@ class MessageBubble extends HookConsumerWidget {
                           color: isUserMessage
                               ? Colors.white
                               : AppTheme.textPrimaryColor,
-                          fontSize: 16,
+                          fontSize: ResponsiveSize.fontSize(16),
                         ),
                         autofocus: true,
                       )
                     : isUserMessage
                         ? Text(
                             message.content,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
+                              fontSize: ResponsiveSize.fontSize(16),
                               height: 1.4,
                             ),
                           )
@@ -96,13 +106,14 @@ class MessageBubble extends HookConsumerWidget {
 
               // Message footer with timestamp and actions
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                padding: EdgeInsets.fromLTRB(ResponsiveSize.horizontal(4), 0,
+                    ResponsiveSize.horizontal(4), ResponsiveSize.vertical(1.5)),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     return Wrap(
                       alignment: WrapAlignment.spaceBetween,
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
+                      spacing: ResponsiveSize.size(8),
                       children: [
                         // Timestamp
                         Container(
@@ -114,7 +125,7 @@ class MessageBubble extends HookConsumerWidget {
                               color: isUserMessage
                                   ? Colors.white70
                                   : AppTheme.textSecondaryColor,
-                              fontSize: 12,
+                              fontSize: ResponsiveSize.fontSize(12),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -132,7 +143,8 @@ class MessageBubble extends HookConsumerWidget {
                                   opacity: isEditing.value ? 1.0 : 0.0,
                                   duration: const Duration(milliseconds: 200),
                                   child: IconButton(
-                                    icon: const Icon(Icons.check, size: 18),
+                                    icon: Icon(Icons.check,
+                                        size: ResponsiveSize.size(18)),
                                     color: Colors.white,
                                     onPressed: () {
                                       onEdit(textController.text);
@@ -140,9 +152,9 @@ class MessageBubble extends HookConsumerWidget {
                                     },
                                     tooltip: 'Save changes',
                                     padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 24,
-                                      minHeight: 24,
+                                    constraints: BoxConstraints(
+                                      minWidth: ResponsiveSize.size(24),
+                                      minHeight: ResponsiveSize.size(24),
                                     ),
                                   ),
                                 ),
@@ -151,7 +163,8 @@ class MessageBubble extends HookConsumerWidget {
                                   opacity: isEditing.value ? 1.0 : 0.0,
                                   duration: const Duration(milliseconds: 200),
                                   child: IconButton(
-                                    icon: const Icon(Icons.close, size: 18),
+                                    icon: Icon(Icons.close,
+                                        size: ResponsiveSize.size(18)),
                                     color: Colors.white,
                                     onPressed: () {
                                       textController.text = message.content;
@@ -159,9 +172,9 @@ class MessageBubble extends HookConsumerWidget {
                                     },
                                     tooltip: 'Cancel editing',
                                     padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 24,
-                                      minHeight: 24,
+                                    constraints: BoxConstraints(
+                                      minWidth: ResponsiveSize.size(24),
+                                      minHeight: ResponsiveSize.size(24),
                                     ),
                                   ),
                                 ),
@@ -171,17 +184,17 @@ class MessageBubble extends HookConsumerWidget {
                                   opacity: isHovering.value ? 1.0 : 0.0,
                                   duration: const Duration(milliseconds: 200),
                                   child: IconButton(
-                                    icon: const Icon(Icons.edit_outlined,
-                                        size: 18),
+                                    icon: Icon(Icons.edit_outlined,
+                                        size: ResponsiveSize.size(18)),
                                     color: Colors.white,
                                     onPressed: () {
                                       isEditing.value = true;
                                     },
                                     tooltip: 'Edit message',
                                     padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 24,
-                                      minHeight: 24,
+                                    constraints: BoxConstraints(
+                                      minWidth: ResponsiveSize.size(24),
+                                      minHeight: ResponsiveSize.size(24),
                                     ),
                                   ),
                                 ),
@@ -190,15 +203,15 @@ class MessageBubble extends HookConsumerWidget {
                                   opacity: isHovering.value ? 1.0 : 0.0,
                                   duration: const Duration(milliseconds: 200),
                                   child: IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        size: 18),
+                                    icon: Icon(Icons.delete_outline,
+                                        size: ResponsiveSize.size(18)),
                                     color: Colors.white,
                                     onPressed: onDelete,
                                     tooltip: 'Delete message',
                                     padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 24,
-                                      minHeight: 24,
+                                    constraints: BoxConstraints(
+                                      minWidth: ResponsiveSize.size(24),
+                                      minHeight: ResponsiveSize.size(24),
                                     ),
                                   ),
                                 ),

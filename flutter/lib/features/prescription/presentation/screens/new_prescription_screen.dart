@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/prescription_providers.dart';
@@ -97,9 +96,8 @@ class NewPrescriptionScreen extends HookConsumerWidget {
 
                         isLoading.value = true;
                         try {
-                          final prescription = await ref.read(
-                              createPrescriptionFromTextProvider(
-                                  (text: text, title: title)));
+                          await ref.read(createPrescriptionFromTextProvider(
+                              (text: text, title: title)));
                           if (context.mounted) {
                             await Future.delayed(
                                 const Duration(milliseconds: 100));

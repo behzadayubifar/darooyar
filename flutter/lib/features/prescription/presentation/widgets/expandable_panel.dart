@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive_size.dart';
 
 class ExpandablePanel extends StatefulWidget {
   final String title;
@@ -92,14 +93,18 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   Widget _buildChildren(BuildContext context, Widget? child) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+      margin: EdgeInsets.symmetric(
+          vertical: ResponsiveSize.vertical(1),
+          horizontal: ResponsiveSize.horizontal(0.5)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(_borderRadius.value),
         boxShadow: [
           BoxShadow(
             color: widget.color.withOpacity(_isExpanded ? 0.2 : 0.1),
-            blurRadius: _isExpanded ? 8 : 4,
-            offset: Offset(0, _isExpanded ? 3 : 2),
+            blurRadius:
+                _isExpanded ? ResponsiveSize.size(8) : ResponsiveSize.size(4),
+            offset: Offset(0,
+                _isExpanded ? ResponsiveSize.size(3) : ResponsiveSize.size(2)),
           ),
         ],
       ),
@@ -129,13 +134,21 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                           : BorderRadius.circular(_borderRadius.value),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 10),
+                      padding: EdgeInsets.symmetric(
+                          vertical: ResponsiveSize.vertical(1.5),
+                          horizontal: ResponsiveSize.horizontal(2.5)),
                       child: LayoutBuilder(builder: (context, constraints) {
-                        final bool isNarrow = constraints.maxWidth < 100;
-                        final double iconSize = isNarrow ? 18 : 22;
-                        final double iconInnerSize = isNarrow ? 12 : 14;
-                        final double spacing = isNarrow ? 4 : 8;
+                        final bool isNarrow =
+                            constraints.maxWidth < ResponsiveSize.width(25);
+                        final double iconSize = isNarrow
+                            ? ResponsiveSize.size(18)
+                            : ResponsiveSize.size(22);
+                        final double iconInnerSize = isNarrow
+                            ? ResponsiveSize.size(12)
+                            : ResponsiveSize.size(14);
+                        final double spacing = isNarrow
+                            ? ResponsiveSize.size(4)
+                            : ResponsiveSize.size(8);
 
                         return Wrap(
                           crossAxisAlignment: WrapCrossAlignment.center,
@@ -145,12 +158,14 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                               width: iconSize,
                               height: iconSize,
                               child: Container(
-                                padding: EdgeInsets.all(isNarrow ? 2 : 3),
+                                padding: EdgeInsets.all(isNarrow
+                                    ? ResponsiveSize.size(2)
+                                    : ResponsiveSize.size(3)),
                                 decoration: BoxDecoration(
                                   color: _isExpanded
                                       ? Colors.white.withOpacity(0.2)
                                       : widget.color.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: ResponsiveSize.borderRadius(4),
                                 ),
                                 child: Icon(
                                   widget.icon,
@@ -163,11 +178,13 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                             Container(
                               constraints: BoxConstraints(
                                 maxWidth: constraints.maxWidth >
-                                        (iconSize * 2 + spacing * 2 + 20)
+                                        (iconSize * 2 +
+                                            spacing * 2 +
+                                            ResponsiveSize.size(20))
                                     ? constraints.maxWidth -
                                         (iconSize * 2) -
                                         (spacing * 2) -
-                                        20
+                                        ResponsiveSize.size(20)
                                     : constraints.maxWidth * 0.5,
                               ),
                               child: Text(
@@ -175,8 +192,11 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: isNarrow
-                                      ? 12
-                                      : (constraints.maxWidth < 150 ? 14 : 15),
+                                      ? ResponsiveSize.fontSize(12)
+                                      : (constraints.maxWidth <
+                                              ResponsiveSize.width(40)
+                                          ? ResponsiveSize.fontSize(14)
+                                          : ResponsiveSize.fontSize(15)),
                                   color:
                                       _isExpanded ? Colors.white : widget.color,
                                 ),
@@ -192,9 +212,11 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                                   color: _isExpanded
                                       ? Colors.white.withOpacity(0.2)
                                       : widget.color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: ResponsiveSize.borderRadius(4),
                                 ),
-                                padding: EdgeInsets.all(isNarrow ? 2 : 3),
+                                padding: EdgeInsets.all(isNarrow
+                                    ? ResponsiveSize.size(2)
+                                    : ResponsiveSize.size(3)),
                                 child: RotationTransition(
                                   turns: _iconTurns,
                                   child: Icon(
@@ -249,43 +271,44 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(ResponsiveSize.size(16)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       widget.content,
-                      style: const TextStyle(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontSize: ResponsiveSize.fontSize(15),
                         height: 1.5,
                         color: AppTheme.textPrimaryColor,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: ResponsiveSize.vertical(1)),
                     Container(
                       alignment: Alignment.centerRight,
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.5,
+                          maxWidth: ResponsiveSize.width(50),
                         ),
                         child: TextButton.icon(
                           onPressed: _handleTap,
-                          icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                          icon: Icon(Icons.keyboard_arrow_up,
+                              size: ResponsiveSize.size(16)),
                           label: Text(
                             'بستن',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: ResponsiveSize.fontSize(12),
                               color: widget.color,
                             ),
                           ),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: ResponsiveSize.horizontal(3),
+                              vertical: ResponsiveSize.vertical(0.5),
                             ),
                             backgroundColor: widget.color.withOpacity(0.1),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: ResponsiveSize.borderRadius(8),
                             ),
                           ),
                         ),

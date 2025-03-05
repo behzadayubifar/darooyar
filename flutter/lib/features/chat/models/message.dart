@@ -4,6 +4,7 @@ class Message {
   final String role;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String contentType; // 'text', 'image', etc.
 
   Message({
     required this.id,
@@ -11,6 +12,7 @@ class Message {
     required this.role,
     required this.createdAt,
     required this.updatedAt,
+    this.contentType = 'text', // Default to text
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class Message {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
+      contentType: json['content_type'] ?? 'text',
     );
   }
 
@@ -33,6 +36,10 @@ class Message {
       'role': role,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'content_type': contentType,
     };
   }
+
+  bool get isImage => contentType == 'image';
+  bool get isText => contentType == 'text';
 }

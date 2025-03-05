@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/logger.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../providers/chat_providers.dart';
@@ -19,6 +23,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _imagePicker = ImagePicker();
+  bool _showPrescriptionOptions = false;
 
   @override
   void dispose() {
@@ -35,6 +41,160 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 70,
+      );
+
+      if (pickedFile != null) {
+        ref
+            .read(messageListProvider(widget.chat.id).notifier)
+            .sendImageMessage(pickedFile.path);
+
+        Future.delayed(const Duration(milliseconds: 300), _scrollToBottom);
+      }
+    } catch (e) {
+      AppLogger.e('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('خطا در انتخاب تصویر. لطفا دوباره تلاش کنید.'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  void _showPrescriptionOptionsDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'نوع نسخه را انتخاب کنید',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading:
+                  const Icon(Icons.text_fields, color: AppTheme.primaryColor),
+              title: const Text('نسخه متنی'),
+              subtitle: const Text('ارسال نسخه به صورت متن'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _showPrescriptionOptions = false;
+                });
+                // Focus on text field
+                FocusScope.of(context).requestFocus(FocusNode());
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  _messageController.text = 'نسخه: ';
+                  FocusScope.of(context).unfocus();
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    FocusScope.of(context).requestFocus(FocusNode());
+                  });
+                });
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
+              title: const Text('عکس از دوربین'),
+              subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_library, color: AppTheme.primaryColor),
+              title: const Text('انتخاب از گالری'),
+              subtitle: const Text('انتخاب تصویر نسخه از گالری'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageContent(String content, bool isImage, bool isLoading) {
+    if (isLoading) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            content,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ],
+      );
+    }
+
+    if (isImage) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(
+              imageUrl: content,
+              placeholder: (context, url) => const SizedBox(
+                height: 100,
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+              errorWidget: (context, url, error) => Container(
+                height: 100,
+                color: Colors.grey[300],
+                child: const Icon(Icons.error),
+              ),
+              fit: BoxFit.cover,
+              width: 200,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'تصویر نسخه',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white70,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Text(
+      content,
+      style: const TextStyle(color: Colors.white),
+    );
   }
 
   @override
@@ -83,6 +243,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   );
                 }
 
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _scrollToBottom();
+                });
+
                 return RefreshIndicator(
                   onRefresh: () => ref
                       .read(messageListProvider(widget.chat.id).notifier)
@@ -94,6 +258,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (context, index) {
                       final message = messages[index];
                       final isUser = message.role == 'user';
+                      final isImage = message.isImage;
+                      final isLoading = message.contentType == 'loading';
 
                       return Align(
                         alignment: isUser
@@ -114,12 +280,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                message.content,
-                                style: TextStyle(
-                                  color: isUser ? Colors.white : Colors.black,
-                                ),
-                              ),
+                              _buildMessageContent(
+                                  message.content, isImage, isLoading),
                               const SizedBox(height: 4),
                               Text(
                                 message.createdAt
@@ -188,6 +350,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.medical_services,
+                    color: _showPrescriptionOptions
+                        ? AppTheme.primaryColor
+                        : Colors.grey,
+                  ),
+                  onPressed: _showPrescriptionOptionsDialog,
+                  tooltip: 'ارسال نسخه',
+                ),
                 Expanded(
                   child: TextField(
                     controller: _messageController,
@@ -200,7 +372,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       filled: true,
                       fillColor:
                           Theme.of(context).brightness == Brightness.light
-                              ? Colors.white
+                              ? Colors.grey[100]
                               : AppTheme.textPrimaryColor,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,

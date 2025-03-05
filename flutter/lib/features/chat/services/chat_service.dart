@@ -366,9 +366,10 @@ class ChatService {
     }
   }
 
-  Future<Message?> createMessage(
-      String chatId, String content, String role) async {
-    AppLogger.i('Creating a new message in chat: $chatId');
+  Future<Message?> createMessage(String chatId, String content, String role,
+      {String contentType = 'text'}) async {
+    AppLogger.i(
+        'Creating a new message in chat: $chatId with content type: $contentType');
     final token = await _authService.getToken();
 
     if (token == null) {
@@ -382,6 +383,7 @@ class ChatService {
         data: {
           'content': content,
           'role': role,
+          'content_type': contentType,
         },
         options: Options(
           headers: {
@@ -450,6 +452,79 @@ class ChatService {
       } else {
         AppLogger.e('Unexpected error creating message: $e');
       }
+      return null;
+    }
+  }
+
+  Future<Message?> uploadImageMessage(String chatId, String imagePath) async {
+    AppLogger.i('Uploading image message for chat: $chatId');
+    final token = await _authService.getToken();
+
+    if (token == null) {
+      AppLogger.w('No token available, cannot upload image');
+      return null;
+    }
+
+    try {
+      // Create form data with the image file
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(imagePath, filename: 'image.jpg'),
+        'role': 'user',
+        'content_type': 'image',
+      });
+
+      final response = await _dio.post(
+        '/chats/$chatId/messages/image',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      AppLogger.d('Upload image response status: ${response.statusCode}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        AppLogger.d('Upload image response data: ${response.data}');
+        final message = Message.fromJson(response.data);
+        AppLogger.i('Successfully uploaded image message: ${message.id}');
+        return message;
+      } else if (response.statusCode == 404) {
+        // Try alternative endpoint format
+        AppLogger.w(
+            'Image upload endpoint not found (404). Trying alternative endpoint.');
+        final alternativeFormData = FormData.fromMap({
+          'image':
+              await MultipartFile.fromFile(imagePath, filename: 'image.jpg'),
+          'role': 'user',
+          'content_type': 'image',
+        });
+
+        final alternativeResponse = await _dio.post(
+          '/api/chat/$chatId/messages/image', // Try alternative endpoint format
+          data: alternativeFormData,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+            },
+            contentType: 'multipart/form-data',
+          ),
+        );
+
+        if (alternativeResponse.statusCode == 201 ||
+            alternativeResponse.statusCode == 200) {
+          AppLogger.i('Successfully uploaded image using alternative endpoint');
+          return Message.fromJson(alternativeResponse.data);
+        }
+      }
+
+      AppLogger.w(
+          'Failed to upload image: ${response.statusCode} - ${response.data}');
+      return null;
+    } catch (e) {
+      AppLogger.e('Error uploading image: $e');
       return null;
     }
   }

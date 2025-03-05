@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
+	"github.com/darooyar/server/config"
+	"github.com/darooyar/server/db"
+	"github.com/darooyar/server/db/migrations"
 	"github.com/darooyar/server/handlers"
+	"github.com/darooyar/server/middleware"
 	"github.com/joho/godotenv"
 )
 
@@ -17,17 +20,33 @@ func main() {
 		log.Println("Warning: No .env file found, using system environment variables")
 	}
 
+	// Get configuration
+	cfg := config.GetConfig()
+
+	// Initialize database
+	if err := db.InitDB(cfg); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.CloseDB()
+
+	// Run database migrations
+	if err := migrations.RunMigrations(); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+
 	// Create a new ServeMux (router)
 	mux := http.NewServeMux()
 
 	// Initialize handlers
 	prescriptionHandler := handlers.NewPrescriptionHandler()
 	aiHandler := handlers.NewAIHandler()
+	authHandler := handlers.NewAuthHandler()
+	chatHandler := handlers.NewChatHandler()
+	folderHandler := handlers.NewFolderHandler()
 
 	// Define API routes
 
 	// Health check endpoint
-
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
 			"status":  "success",
@@ -40,25 +59,45 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	})
 
-	// Prescription analysis endpoints
-	mux.HandleFunc("POST /api/analyze-prescription/text", prescriptionHandler.AnalyzePrescriptionText)
-	mux.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
+	// Auth endpoints (no middleware)
+	mux.HandleFunc("POST /api/auth/register", authHandler.Register)
+	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
 
-	// AI endpoints
-	mux.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)
-	mux.HandleFunc("POST /api/ai/analyze-prescription", aiHandler.AnalyzePrescriptionWithAI)
+	// Protected routes (with auth middleware)
+	protected := http.NewServeMux()
+
+	// Chat routes
+	protected.HandleFunc("POST /api/chats", chatHandler.CreateChat)
+	protected.HandleFunc("GET /api/chats", chatHandler.GetUserChats)
+	protected.HandleFunc("GET /api/chats/{id}", chatHandler.GetChat)
+	protected.HandleFunc("PUT /api/chats/{id}", chatHandler.UpdateChat)
+	protected.HandleFunc("DELETE /api/chats/{id}", chatHandler.DeleteChat)
+	protected.HandleFunc("GET /api/chats/{id}/messages", chatHandler.GetChatMessages)
+	protected.HandleFunc("POST /api/messages", chatHandler.CreateMessage)
+
+	// Folder routes
+	protected.HandleFunc("POST /api/folders", folderHandler.CreateFolder)
+	protected.HandleFunc("GET /api/folders", folderHandler.GetUserFolders)
+	protected.HandleFunc("GET /api/folders/{id}", folderHandler.GetFolder)
+	protected.HandleFunc("PUT /api/folders/{id}", folderHandler.UpdateFolder)
+	protected.HandleFunc("DELETE /api/folders/{id}", folderHandler.DeleteFolder)
+
+	// Auth and other routes
+	protected.HandleFunc("GET /api/auth/me", authHandler.GetMe)
+	protected.HandleFunc("POST /api/analyze-prescription/text", prescriptionHandler.AnalyzePrescriptionText)
+	protected.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
+	protected.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)
+	protected.HandleFunc("POST /api/ai/analyze-prescription", aiHandler.AnalyzePrescriptionWithAI)
+
+	// Apply auth middleware to protected routes
+	mux.Handle("/api/", middleware.AuthMiddleware(protected))
 
 	// Configure CORS middleware
 	handler := corsMiddleware(mux)
 
 	// Set up the server
-	addr := os.Getenv("SERVER_ADDR")
-	if addr == "" {
-		addr = ":8080" // Default to all interfaces on port 8080
-	}
-
 	server := &http.Server{
-		Addr:         addr,
+		Addr:         cfg.ServerAddr,
 		Handler:      handler,
 		ReadTimeout:  120 * time.Second,
 		WriteTimeout: 120 * time.Second,
@@ -66,10 +105,9 @@ func main() {
 	}
 
 	// Start the server
-	log.Printf("Starting دارویار API server on %s", addr)
+	log.Printf("Starting دارویار API server on %s", cfg.ServerAddr)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
-		os.Exit(1)
 	}
 }
 

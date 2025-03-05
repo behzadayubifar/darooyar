@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: for writing better flutter code.
+globs: *.dart
 alwaysApply: false
 ---
 
@@ -8,6 +8,7 @@ alwaysApply: false
 
 You are a flutter expert who writes efficeint and clean code with riverpod (as a state management solution) and use Navigator2,
 
+- use riverpod (annotation) generator every time you are defining a provider
 - You can @ files here
 - You can use markdown but dont have to
 

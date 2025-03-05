@@ -4,8 +4,6 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../main.dart';
 import '../../../../features/auth/providers/auth_providers.dart';
-import 'home_screen.dart';
-import '../../../auth/screens/login_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -15,19 +13,48 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  bool _hasNavigated = false;
+  bool _isInitialized = false;
+  bool _safetyTimeoutCancelled = false;
+
   @override
   void initState() {
     super.initState();
     // Delay the check slightly to ensure providers are ready
     Future.delayed(const Duration(milliseconds: 100), _checkInitialization);
 
-    // Add a timeout to ensure we don't get stuck on the splash screen
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        debugPrint('Splash screen timeout reached, navigating to login');
-        Navigator.of(context).pushReplacementNamed('/login');
+    // Safety timeout - only if something goes wrong with auth state
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted && !_hasNavigated && !_safetyTimeoutCancelled) {
+        debugPrint('Safety timeout reached, navigating to login');
+        _navigateToLogin();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for auth state changes
+    if (_isInitialized) {
+      _checkAuthState();
+    }
+  }
+
+  void _navigateToHome() {
+    if (!mounted || _hasNavigated) return;
+    _hasNavigated = true;
+    _safetyTimeoutCancelled = true;
+    debugPrint('Navigating to HomeScreen...');
+    Navigator.of(context).pushReplacementNamed('/home');
+  }
+
+  void _navigateToLogin() {
+    if (!mounted || _hasNavigated) return;
+    _hasNavigated = true;
+    _safetyTimeoutCancelled = true;
+    debugPrint('Navigating to LoginScreen...');
+    Navigator.of(context).pushReplacementNamed('/login');
   }
 
   void _checkInitialization() {
@@ -35,32 +62,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     debugPrint('Checking initialization and auth state...');
     final initializationState = ref.read(appInitializationProvider);
-    final authState = ref.read(authStateProvider);
 
     // Add a try-catch block to handle any potential errors
     try {
       initializationState.whenData((initialized) {
         debugPrint('Initialization state: $initialized');
         if (initialized) {
-          try {
-            authState.whenData((user) {
-              debugPrint('Auth state: ${user?.email ?? "Not logged in"}');
-              if (!mounted) return;
-
-              if (user != null) {
-                debugPrint('Navigating to HomeScreen...');
-                Navigator.of(context).pushReplacementNamed('/home');
-              } else {
-                debugPrint('Navigating to LoginScreen...');
-                Navigator.of(context).pushReplacementNamed('/login');
-              }
-            });
-          } catch (e) {
-            debugPrint('Error processing auth state: $e');
-            if (mounted) {
-              Navigator.of(context).pushReplacementNamed('/login');
-            }
-          }
+          setState(() {
+            _isInitialized = true;
+          });
+          _checkAuthState();
         } else {
           debugPrint('Initialization failed');
           if (!mounted) return;
@@ -70,13 +81,52 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             ),
           );
           // Still navigate to login even if initialization fails
-          Navigator.of(context).pushReplacementNamed('/login');
+          _navigateToLogin();
         }
       });
     } catch (e) {
       debugPrint('Error in _checkInitialization: $e');
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
+        _navigateToLogin();
+      }
+    }
+  }
+
+  void _checkAuthState() {
+    if (!mounted || _hasNavigated) return;
+
+    final authState = ref.read(authStateProvider);
+
+    try {
+      // Check if auth state is still loading
+      if (authState is AsyncLoading) {
+        debugPrint('Auth state is still loading, waiting...');
+        // Schedule another check after a short delay
+        Future.delayed(const Duration(milliseconds: 500), _checkAuthState);
+        return;
+      }
+
+      // Check for auth state value
+      authState.whenData((user) {
+        debugPrint(
+            'Auth state check result: ${user != null ? "User found" : "No user"}');
+        if (!mounted) return;
+
+        if (user != null) {
+          // Cancel safety timeout since we have a valid user
+          _safetyTimeoutCancelled = true;
+          _navigateToHome();
+        } else {
+          // Only navigate to login if we're sure the user is not authenticated
+          if (!authState.isLoading) {
+            _navigateToLogin();
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('Error processing auth state: $e');
+      if (mounted) {
+        _navigateToLogin();
       }
     }
   }
@@ -87,11 +137,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     final initState = ref.watch(appInitializationProvider);
     final authState = ref.watch(authStateProvider);
 
+    // Check auth state whenever it changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isInitialized && !_hasNavigated) {
+        _checkAuthState();
+      }
+
+      // Cancel safety timeout and navigate to home if user is authenticated
+      if (authState.hasValue && authState.valueOrNull != null) {
+        debugPrint(
+            'User authenticated in post frame callback, cancelling safety timeout');
+        _safetyTimeoutCancelled = true;
+        if (!_hasNavigated) {
+          _navigateToHome();
+        }
+      }
+    });
+
     debugPrint(
         'Build called - Init state: ${initState.value}, Auth state: ${authState.value?.email ?? "Not logged in"}');
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.surfaceColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -15,20 +15,72 @@ final authStateProvider =
 // Auth state notifier
 class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
   final AuthService _authService;
+  bool _isCheckingAuth = false;
 
   AuthStateNotifier(this._authService) : super(const AsyncValue.loading()) {
     _checkAuth();
   }
 
   Future<void> _checkAuth() async {
+    if (_isCheckingAuth) {
+      debugPrint('AuthStateNotifier: Auth check already in progress, skipping');
+      return;
+    }
+
+    _isCheckingAuth = true;
+    debugPrint('AuthStateNotifier: Checking authentication state...');
+
     try {
+      // First check if we have a valid token without making a network request
+      final hasValidToken = await _authService.hasValidToken();
+      debugPrint('AuthStateNotifier: Has valid token: $hasValidToken');
+
+      if (!hasValidToken) {
+        debugPrint(
+            'AuthStateNotifier: No valid token found, setting auth state to null');
+        state = const AsyncValue.data(null);
+        _isCheckingAuth = false;
+        return;
+      }
+
+      // If we have a valid token, try to get the current user
+      debugPrint(
+          'AuthStateNotifier: Token appears valid, retrieving user data...');
       final user = await _authService.getCurrentUser();
       debugPrint(
-          'Auth state check result: ${user != null ? 'User found' : 'No user found'}');
-      state = AsyncValue.data(user);
+          'AuthStateNotifier: User data retrieval result: ${user != null ? 'User found' : 'No user found'}');
+
+      if (user != null) {
+        debugPrint(
+            'AuthStateNotifier: Setting authenticated state with user: ${user.email}');
+        state = AsyncValue.data(user);
+      } else {
+        // If getCurrentUser returns null despite having a valid token,
+        // there might be a server issue or token validation problem
+        debugPrint(
+            'AuthStateNotifier: Token appeared valid but user data could not be retrieved');
+        state = const AsyncValue.data(null);
+
+        // Try to clear the invalid token
+        debugPrint('AuthStateNotifier: Logging out due to invalid token');
+        await _authService.logout();
+      }
     } catch (e) {
-      debugPrint('Auth state check error: $e');
-      state = AsyncValue.data(null); // Default to not authenticated on error
+      debugPrint('AuthStateNotifier: Error during authentication check: $e');
+      state = AsyncValue.error(e, StackTrace.current);
+
+      // After a brief delay, set to not authenticated on error
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (mounted) {
+          state = const AsyncValue.data(null);
+        }
+      });
+
+      // Try to clear any potentially invalid token
+      debugPrint('AuthStateNotifier: Logging out due to error');
+      await _authService.logout();
+    } finally {
+      _isCheckingAuth = false;
     }
   }
 
@@ -80,8 +132,19 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<void> refreshUser() async {
-    state = const AsyncValue.loading();
-    _checkAuth();
+    debugPrint('AuthStateNotifier: Refreshing user data');
+    if (!_isCheckingAuth) {
+      _checkAuth();
+    } else {
+      debugPrint(
+          'AuthStateNotifier: Auth check already in progress, refresh queued');
+      // Queue a refresh after current check completes
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (mounted && !_isCheckingAuth) {
+          _checkAuth();
+        }
+      });
+    }
   }
 }
 

@@ -29,12 +29,11 @@ class AppTheme {
         seedColor: primaryColor,
         primary: primaryColor,
         secondary: secondaryColor,
-        background: backgroundColor,
         surface: surfaceColor,
         error: errorColor,
         brightness: Brightness.light,
       ),
-      scaffoldBackgroundColor: backgroundColor,
+      scaffoldBackgroundColor: surfaceColor,
       fontFamily: persianFontFamily,
       cardTheme: CardTheme(
         color: cardColor,
@@ -46,7 +45,7 @@ class AppTheme {
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: backgroundColor,
+        backgroundColor: surfaceColor,
         elevation: 0,
         centerTitle: true,
         titleTextStyle: const TextStyle(

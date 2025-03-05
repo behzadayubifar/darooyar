@@ -9,13 +9,15 @@ import 'core/utils/responsive_size.dart';
 import 'core/utils/logger.dart';
 import 'features/prescription/presentation/providers/prescription_providers.dart';
 import 'features/prescription/presentation/screens/splash_screen.dart';
-import 'features/auth/models/user.dart';
 import 'features/auth/providers/auth_providers.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/register_screen.dart';
 import 'features/chat/screens/chat_list_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
 import 'features/chat/services/chat_service.dart';
+
+// Flag to track if API endpoint discovery has been run
+bool _apiEndpointDiscoveryRun = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +38,7 @@ void main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: AppTheme.backgroundColor,
+      systemNavigationBarColor: AppTheme.surfaceColor,
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
@@ -56,17 +58,6 @@ void main() async {
     AppLogger.e('Error during migration: $e');
   }
 
-  // Debug API endpoint discovery (only in debug mode)
-  if (kDebugMode) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      debugPrint('Running API endpoint discovery in debug mode');
-      final chatService = ChatService();
-      await Future.delayed(
-          const Duration(seconds: 5)); // Wait for app to initialize
-      await chatService.discoverApiEndpoints();
-    });
-  }
-
   runApp(
     UncontrolledProviderScope(
       container: container,
@@ -84,8 +75,26 @@ class MyApp extends ConsumerWidget {
     final isInitialized = ref.watch(appInitializationProvider);
     final authState = ref.watch(authStateProvider);
 
+    // Run API endpoint discovery when authenticated (only in debug mode)
+    if (kDebugMode &&
+        !_apiEndpointDiscoveryRun &&
+        authState.valueOrNull != null) {
+      _apiEndpointDiscoveryRun = true;
+      debugPrint('User authenticated, running API endpoint discovery');
+      // Use a microtask to avoid blocking the UI thread
+      Future.microtask(() async {
+        try {
+          final chatService = ChatService();
+          await chatService.discoverApiEndpoints();
+        } catch (e) {
+          debugPrint('API endpoint discovery error: $e');
+          // Don't let discovery errors affect the main app flow
+        }
+      });
+    }
+
     debugPrint(
-        'Build called - Init state: ${isInitialized.value ?? false}, Auth state: ${authState.valueOrNull != null ? 'Logged in' : 'Not logged in'}');
+        'Build called - Init state: ${isInitialized.value ?? false}, Auth state: ${authState.valueOrNull != null ? authState.valueOrNull!.email : 'Not logged in'}');
 
     return MaterialApp(
       title: AppStrings.appName,
@@ -151,7 +160,7 @@ class MyApp extends ConsumerWidget {
         return MediaQuery(
           // Apply the font size from settings
           data: MediaQuery.of(context).copyWith(
-            textScaleFactor: fontSizeScale,
+            textScaler: TextScaler.linear(fontSizeScale),
           ),
           child: Directionality(
             textDirection: TextDirection.rtl,
@@ -170,34 +179,15 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
 
     // Initialize database
     final databaseService = ref.read(databaseServiceProvider);
-    final db = await databaseService.db;
+    await databaseService.db;
 
     // Verify database is properly initialized
-    if (db == null) {
-      debugPrint('Database initialization failed');
-      return false;
-    }
     debugPrint('Database initialized successfully');
 
     // Initialize other services that depend on the database
     final repository = ref.read(prescriptionRepositoryProvider);
     await repository.getAllPrescriptions(); // Pre-fetch prescriptions
     debugPrint('Prescriptions pre-fetched');
-
-    // Set a timeout for the API endpoint discovery in debug mode
-    if (kDebugMode) {
-      // Fire and forget - don't wait for this to complete
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        debugPrint('Running API endpoint discovery in debug mode');
-        try {
-          final chatService = ChatService();
-          await chatService.discoverApiEndpoints();
-        } catch (e) {
-          debugPrint('API endpoint discovery failed: $e');
-          // Continue initialization even if endpoint discovery fails
-        }
-      });
-    }
 
     debugPrint('App initialization completed successfully');
     return true;

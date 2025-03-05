@@ -121,14 +121,16 @@ class ChatListScreen extends ConsumerWidget {
                 if (chat.folderId != null) {
                   // Get the folder from the folders list
                   final folders = foldersAsync.valueOrNull ?? [];
-                  final folder = folders.firstWhere(
-                    (f) => f.id == chat.folderId,
-                    orElse: () => folders.first,
-                  );
+                  if (folders.isNotEmpty) {
+                    final folder = folders.firstWhere(
+                      (f) => f.id == chat.folderId,
+                      orElse: () => folders.first,
+                    );
 
-                  // Use the folder's color if available
-                  if (folder.getColor() != null) {
-                    folderColor = folder.getColor()!;
+                    // Use the folder's color if available
+                    if (folder.getColor() != null) {
+                      folderColor = folder.getColor()!;
+                    }
                   }
                 }
 

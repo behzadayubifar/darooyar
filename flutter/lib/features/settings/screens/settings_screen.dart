@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
 import '../../auth/models/user.dart';
 import '../../auth/providers/auth_providers.dart';

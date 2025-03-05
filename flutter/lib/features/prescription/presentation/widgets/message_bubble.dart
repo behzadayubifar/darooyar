@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive_size.dart';
 import '../../domain/entities/prescription_message_entity.dart';
-import '../providers/prescription_providers.dart';
 import 'structured_medication_info.dart';
 
 class MessageBubble extends HookConsumerWidget {

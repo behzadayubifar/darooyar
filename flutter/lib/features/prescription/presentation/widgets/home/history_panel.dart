@@ -40,7 +40,7 @@ class HistoryPanel extends ConsumerWidget {
               horizontal: ResponsiveSize.horizontal(4),
             ),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundColor,
+              color: AppTheme.surfaceColor,
               boxShadow: [
                 BoxShadow(
                   color: AppTheme.shadowColor,

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/logger.dart';
@@ -7,11 +6,16 @@ import '../../auth/services/auth_service.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatService {
   static const String baseUrl = AppConstants.baseUrl;
   final AuthService _authService = AuthService();
   final Dio _dio;
+
+  // Add the missing variables
+  Set<String> _successfulEndpoints = {};
+  Set<String> _failedEndpoints = {};
 
   ChatService()
       : _dio = Dio(BaseOptions(
@@ -399,10 +403,10 @@ class ChatService {
         final message = Message.fromJson(response.data);
         AppLogger.i('Successfully created message: ${message.id}');
         return message;
-      } else if (response.statusCode == 404) {
+      } else if (response.statusCode == 404 || response.statusCode == 405) {
         // Try alternative endpoint format
         AppLogger.w(
-            'Message creation endpoint not found (404). Trying alternative endpoint.');
+            'Message creation endpoint not found (${response.statusCode}). Trying alternative endpoint.');
         final alternativeResponse = await _dio.post(
           '/api/chat/$chatId/messages', // Try alternative endpoint format
           data: {
@@ -422,7 +426,8 @@ class ChatService {
               'Successfully created message using alternative endpoint');
           return Message.fromJson(alternativeResponse.data);
         }
-        AppLogger.w('Unable to create message. Both endpoints returned 404.');
+        AppLogger.w(
+            'Unable to create message. Both endpoints returned errors.');
         return null;
       } else if (response.statusCode == 401) {
         AppLogger.w(
@@ -671,57 +676,168 @@ class ChatService {
     }
   }
 
-  // Add this method to help discover the correct API endpoints
+  // Discover API endpoints by trying different variations
   Future<void> discoverApiEndpoints() async {
     AppLogger.i('Starting API endpoint discovery');
-    final token = await _authService.getToken();
 
+    // Check if we have a token before proceeding
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
     if (token == null) {
-      AppLogger.w('No token available, cannot perform API discovery');
+      AppLogger.w('No auth token found, skipping API endpoint discovery');
       return;
     }
 
-    // List of potential endpoints to try
-    final endpointVariations = [
+    // Load cached endpoints first
+    await _loadCachedEndpoints();
+
+    // If we already have cached successful endpoints, use them first
+    if (_successfulEndpoints.isNotEmpty) {
+      AppLogger.i(
+          'Using ${_successfulEndpoints.length} cached successful endpoints');
+      return;
+    }
+
+    // Only try to discover endpoints if we don't have cached ones
+    final endpoints = [
       '/chats',
-      '/api/chats',
-      '/api/chat',
       '/chat',
+      '/conversations',
       '/conversation',
-      '/api/conversation',
+      '/messages',
+      '/message',
     ];
 
-    for (final endpoint in endpointVariations) {
+    for (final endpoint in endpoints) {
+      // Skip if we already know this endpoint works
+      if (_successfulEndpoints.contains(endpoint)) {
+        AppLogger.i('Using cached successful endpoint: $endpoint');
+        continue;
+      }
+
+      // Skip if we already know this endpoint fails
+      if (_failedEndpoints.contains(endpoint)) {
+        AppLogger.d('Skipping known failed endpoint: $endpoint');
+        continue;
+      }
+
       try {
         AppLogger.d('Trying endpoint: $endpoint');
-        final response = await _dio.get(
-          endpoint,
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
+        final response = await http.get(
+          Uri.parse('$baseUrl$endpoint'),
+          headers: {'Authorization': 'Bearer $token'},
         );
 
-        AppLogger.i('Endpoint $endpoint returned ${response.statusCode}');
+        AppLogger.network('GET', '$baseUrl$endpoint', response.statusCode);
+
         if (response.statusCode == 200) {
-          AppLogger.i('SUCCESS: Found working endpoint: $endpoint');
+          _successfulEndpoints.add(endpoint);
+          await _cacheEndpoint(endpoint, true);
+
+          // Try to parse the response to see if it's a valid chat list
           try {
-            final chats = (response.data as List)
-                .map((json) => Chat.fromJson(json))
-                .toList();
-            AppLogger.i('Endpoint $endpoint returned ${chats.length} chats');
+            final data = json.decode(response.body);
+            if (data is List) {
+              AppLogger.i('Endpoint $endpoint returned ${data.length} chats');
+              // We found a working endpoint, no need to try others
+              break;
+            }
           } catch (e) {
-            AppLogger.w(
-                'Endpoint $endpoint returned 200 but data format is not compatible: $e');
+            AppLogger.w('Endpoint $endpoint returned 200 but invalid JSON: $e');
           }
+        } else {
+          _failedEndpoints.add(endpoint);
+          await _cacheEndpoint(endpoint, false);
+          AppLogger.d(
+              'Endpoint $endpoint failed with status ${response.statusCode}');
         }
       } catch (e) {
-        AppLogger.d(
-            'Endpoint $endpoint failed: ${e.toString().substring(0, min(100, e.toString().length))}');
+        _failedEndpoints.add(endpoint);
+        await _cacheEndpoint(endpoint, false);
+        AppLogger.w('Error trying endpoint $endpoint: $e');
       }
     }
 
-    AppLogger.i('API endpoint discovery completed');
+    // Save the discovered endpoints
+    await _saveCachedEndpoints();
+
+    if (_successfulEndpoints.isEmpty) {
+      AppLogger.w('No successful endpoints found during discovery');
+    } else {
+      AppLogger.i(
+          'Discovered ${_successfulEndpoints.length} working endpoints');
+    }
+  }
+
+  // Load cached endpoints from shared preferences
+  Future<void> _loadCachedEndpoints() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final successfulJson = prefs.getString('successful_endpoints');
+      final failedJson = prefs.getString('failed_endpoints');
+
+      if (successfulJson != null) {
+        final List<dynamic> successful = json.decode(successfulJson);
+        _successfulEndpoints = successful.cast<String>().toSet();
+        AppLogger.d(
+            'Loaded ${_successfulEndpoints.length} cached successful endpoints');
+      }
+
+      if (failedJson != null) {
+        final List<dynamic> failed = json.decode(failedJson);
+        _failedEndpoints = failed.cast<String>().toSet();
+        AppLogger.d(
+            'Loaded ${_failedEndpoints.length} cached failed endpoints');
+      }
+    } catch (e) {
+      AppLogger.e('Error loading cached endpoints: $e');
+      // Reset caches if there's an error
+      _successfulEndpoints = {};
+      _failedEndpoints = {};
+    }
+  }
+
+  // Save cached endpoints to shared preferences
+  Future<void> _saveCachedEndpoints() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'successful_endpoints', json.encode(_successfulEndpoints.toList()));
+      await prefs.setString(
+          'failed_endpoints', json.encode(_failedEndpoints.toList()));
+      AppLogger.d(
+          'Saved ${_successfulEndpoints.length} successful and ${_failedEndpoints.length} failed endpoints');
+    } catch (e) {
+      AppLogger.e('Error saving cached endpoints: $e');
+    }
+  }
+
+  // Cache a single endpoint result
+  Future<void> _cacheEndpoint(String endpoint, bool isSuccess) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final successfulJson = prefs.getString('successful_endpoints') ?? '[]';
+      final failedJson = prefs.getString('failed_endpoints') ?? '[]';
+
+      final List<dynamic> successfulList = json.decode(successfulJson);
+      final List<dynamic> failedList = json.decode(failedJson);
+
+      final Set<String> successful = successfulList.cast<String>().toSet();
+      final Set<String> failed = failedList.cast<String>().toSet();
+
+      if (isSuccess) {
+        successful.add(endpoint);
+        failed.remove(endpoint);
+      } else {
+        failed.add(endpoint);
+        successful.remove(endpoint);
+      }
+
+      await prefs.setString(
+          'successful_endpoints', json.encode(successful.toList()));
+      await prefs.setString('failed_endpoints', json.encode(failed.toList()));
+    } catch (e) {
+      AppLogger.e('Error caching endpoint $endpoint: $e');
+    }
   }
 }

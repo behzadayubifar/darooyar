@@ -177,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: AppTheme.backgroundColor,
+        backgroundColor: AppTheme.surfaceColor,
         body: SafeArea(
           child: SingleChildScrollView(
             controller: _scrollController,

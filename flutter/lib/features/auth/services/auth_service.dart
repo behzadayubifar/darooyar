@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
@@ -36,6 +35,22 @@ class AuthService {
       await prefs.setString(tokenKey, token);
       await prefs.setBool(
           hasValidTokenKey, true); // Flag to indicate token existence
+
+      // Extract and save user info from token for faster access
+      try {
+        final Map<String, dynamic> payload = _decodeJwtPayload(token);
+        if (payload.containsKey('user_id') || payload.containsKey('userId')) {
+          final userId = payload['user_id'] ?? payload['userId'];
+          await prefs.setInt(
+              'user_id', userId is int ? userId : int.parse(userId.toString()));
+        }
+        if (payload.containsKey('email')) {
+          await prefs.setString('user_email', payload['email']);
+        }
+      } catch (e) {
+        AppLogger.w('Could not extract user info from token: $e');
+      }
+
       AppLogger.i('Token saved successfully');
     } catch (e) {
       AppLogger.e('Error saving token: $e');
@@ -199,7 +214,9 @@ class AuthService {
 
       // Extract user info from token payload
       final Map<String, dynamic> payload = _decodeJwtPayload(token);
-      if (!payload.containsKey('userId') || !payload.containsKey('email')) {
+      // Check for either userId or user_id in the payload
+      if ((!payload.containsKey('userId') && !payload.containsKey('user_id')) ||
+          !payload.containsKey('email')) {
         AppLogger.w('Token payload missing required user fields');
         // Continue to server validation as the token format might be different
       } else {
@@ -227,6 +244,10 @@ class AuthService {
       if (response.statusCode == 200) {
         final userData = json.decode(response.body);
         AppLogger.i('Successfully retrieved user data from server');
+
+        // Save the token again to ensure we have the latest user data
+        await saveToken(token);
+
         return User.fromJson(userData);
       } else if (response.statusCode == 404) {
         AppLogger.w(
@@ -289,6 +310,47 @@ class AuthService {
     } catch (e) {
       AppLogger.w('Error checking token expiration: $e');
       return true; // Assume expired if we can't validate
+    }
+  }
+
+  // Check if token is valid without making a network request
+  Future<bool> hasValidToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasToken = prefs.getBool(hasValidTokenKey) ?? false;
+
+      if (!hasToken) {
+        AppLogger.d('No valid token flag found');
+        return false;
+      }
+
+      final token = await getToken();
+      if (token == null) {
+        AppLogger.d('Token flag exists but no token found');
+        await prefs.setBool(hasValidTokenKey, false);
+        return false;
+      }
+
+      // Basic check for token format - should be a JWT with 3 parts
+      if (!_isValidJwtFormat(token)) {
+        AppLogger.w('Token is not in valid JWT format');
+        await logout();
+        return false;
+      }
+
+      // Check if the token is expired
+      if (_isTokenExpired(token)) {
+        AppLogger.w('Token is expired');
+        await logout();
+        return false;
+      }
+
+      // Even if we can't extract user info, the token might still be valid
+      // Let the server validate it
+      return true;
+    } catch (e) {
+      AppLogger.e('Error checking token validity: $e');
+      return false;
     }
   }
 }

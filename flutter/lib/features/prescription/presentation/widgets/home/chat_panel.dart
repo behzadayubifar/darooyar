@@ -9,7 +9,7 @@ import '../../providers/prescription_providers.dart';
 import '../message_bubble.dart';
 import 'prescription_header.dart';
 
-class ChatPanel extends ConsumerWidget {
+class ChatPanel extends ConsumerStatefulWidget {
   final String prescriptionId;
   final ScrollController scrollController;
   final TextEditingController messageController;
@@ -24,10 +24,17 @@ class ChatPanel extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatPanel> createState() => _ChatPanelState();
+}
+
+class _ChatPanelState extends ConsumerState<ChatPanel> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
     final selectedPrescriptionAsync = ref.watch(selectedPrescriptionProvider);
     final messagesAsync =
-        ref.watch(prescriptionMessagesProvider(prescriptionId));
+        ref.watch(prescriptionMessagesProvider(widget.prescriptionId));
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -43,7 +50,7 @@ class ChatPanel extends ConsumerWidget {
 
                 return PrescriptionHeader(
                   prescription: prescription,
-                  showHistoryPanel: showHistoryPanel,
+                  showHistoryPanel: widget.showHistoryPanel,
                   onDelete: () async {
                     final confirmed = await showDialog<bool>(
                           context: context,
@@ -86,7 +93,7 @@ class ChatPanel extends ConsumerWidget {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppTheme.backgroundColor,
+                  color: AppTheme.surfaceColor,
                   borderRadius: BorderRadius.circular(0),
                 ),
                 child: messagesAsync.when(
@@ -124,7 +131,7 @@ class ChatPanel extends ConsumerWidget {
 
                     return AnimationLimiter(
                       child: ListView.builder(
-                        controller: scrollController,
+                        controller: widget.scrollController,
                         itemCount: messages.length,
                         padding: EdgeInsets.symmetric(
                             vertical: ResponsiveSize.vertical(2)),
@@ -144,7 +151,7 @@ class ChatPanel extends ConsumerWidget {
                                       ref.read(deleteMessageProvider(
                                         (
                                           messageId: message.id,
-                                          prescriptionId: prescriptionId
+                                          prescriptionId: widget.prescriptionId
                                         ),
                                       ));
                                     }
@@ -206,7 +213,7 @@ class ChatPanel extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         TextField(
-                          controller: messageController,
+                          controller: widget.messageController,
                           decoration: InputDecoration(
                             hintText: AppStrings.messageHint,
                             border: OutlineInputBorder(
@@ -232,16 +239,27 @@ class ChatPanel extends ConsumerWidget {
                           width: ResponsiveSize.size(10),
                           height: ResponsiveSize.size(10),
                           child: FloatingActionButton(
-                            onPressed: () {
-                              final message = messageController.text.trim();
-                              if (message.isNotEmpty) {
-                                _sendMessage(ref, prescriptionId, message);
-                                messageController.clear();
-                              }
-                            },
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    final message =
+                                        widget.messageController.text.trim();
+                                    if (message.isNotEmpty) {
+                                      _sendMessage(message);
+                                    }
+                                  },
                             mini: true,
-                            child: Icon(Icons.send,
-                                size: ResponsiveSize.size(4.5)),
+                            child: _isLoading
+                                ? SizedBox(
+                                    width: ResponsiveSize.size(24),
+                                    height: ResponsiveSize.size(24),
+                                    child: CircularProgressIndicator(
+                                      color: AppTheme.surfaceColor,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(Icons.send,
+                                    size: ResponsiveSize.size(4.5)),
                           ),
                         ),
                       ],
@@ -254,7 +272,7 @@ class ChatPanel extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: TextField(
-                          controller: messageController,
+                          controller: widget.messageController,
                           decoration: InputDecoration(
                             hintText: AppStrings.messageHint,
                             border: OutlineInputBorder(
@@ -281,16 +299,26 @@ class ChatPanel extends ConsumerWidget {
                         width: ResponsiveSize.size(48),
                         height: ResponsiveSize.size(48),
                         child: FloatingActionButton(
-                          onPressed: () {
-                            final message = messageController.text.trim();
-                            if (message.isNotEmpty) {
-                              _sendMessage(ref, prescriptionId, message);
-                              messageController.clear();
-                            }
-                          },
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  final message =
+                                      widget.messageController.text.trim();
+                                  if (message.isNotEmpty) {
+                                    _sendMessage(message);
+                                  }
+                                },
                           mini: true,
-                          child:
-                              Icon(Icons.send, size: ResponsiveSize.size(32)),
+                          child: _isLoading
+                              ? SizedBox(
+                                  width: ResponsiveSize.size(24),
+                                  height: ResponsiveSize.size(24),
+                                  child: CircularProgressIndicator(
+                                    color: AppTheme.surfaceColor,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(Icons.send, size: ResponsiveSize.size(32)),
                         ),
                       ),
                     ],
@@ -304,8 +332,42 @@ class ChatPanel extends ConsumerWidget {
     );
   }
 
-  void _sendMessage(WidgetRef ref, String prescriptionId, String message) {
-    ref.read(sendFollowUpMessageProvider(
-        (prescriptionId: prescriptionId, message: message)));
+  Future<void> _sendMessage(String message) async {
+    if (message.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await ref.read(sendFollowUpMessageProvider((
+        prescriptionId: widget.prescriptionId,
+        message: message,
+      )).future);
+
+      widget.messageController.clear();
+
+      // Scroll to the bottom after a short delay to ensure the new message is rendered
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (widget.scrollController.hasClients) {
+          widget.scrollController.animateTo(
+            widget.scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${AppStrings.errorGeneric} $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 }

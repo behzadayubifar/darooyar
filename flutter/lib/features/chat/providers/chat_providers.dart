@@ -1,10 +1,13 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../models/chat.dart';
 import '../services/chat_service.dart';
+import '../services/mock_chat_service.dart';
 import '../../../core/utils/logger.dart';
 import 'folder_providers.dart';
 
-final chatServiceProvider = Provider<ChatService>((ref) => ChatService());
+final chatServiceProvider = Provider<ChatService>((ref) {
+  return ChatService();
+});
 
 final chatListProvider =
     StateNotifierProvider<ChatListNotifier, AsyncValue<List<Chat>>>((ref) {

@@ -17,6 +17,16 @@ class Chat {
     this.folderId,
   });
 
+  // Add helper method to get the ID as an integer
+  int get idAsInt {
+    try {
+      return int.parse(id);
+    } catch (e) {
+      // Return a fallback value if the ID is not a valid integer
+      return 1; // Default to chat ID 1 if parsing fails
+    }
+  }
+
   factory Chat.fromJson(Map<String, dynamic> json) {
     List<Message> messagesList = [];
     if (json.containsKey('messages') && json['messages'] != null) {

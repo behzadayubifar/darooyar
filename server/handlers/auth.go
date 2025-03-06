@@ -167,6 +167,33 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// VerifyToken checks if a token is valid and returns user information
+func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
+	// Get user ID from context (this will be set by the auth middleware if token is valid)
+	userID, ok := r.Context().Value("user_id").(int64)
+	if !ok {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	// Get additional user info if needed
+	user, err := db.GetUserByID(userID)
+	if err != nil {
+		http.Error(w, "Error retrieving user data", http.StatusInternalServerError)
+		return
+	}
+
+	// Return user information
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":    "success",
+		"message":   "Token is valid",
+		"user_id":   userID,
+		"username":  user.Username,
+		"is_active": true,
+	})
+}
+
 // Helper function to send error responses in JSON format
 func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")

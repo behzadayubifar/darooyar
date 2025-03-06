@@ -5,20 +5,51 @@ import '../../../core/utils/logger.dart';
 import '../../auth/services/auth_service.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
+import 'mock_chat_service.dart'; // Add import for MockChatService
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Add prescription response template
+const String prescriptionPromptTemplate = '''
+من مسئول فنی یک داروخانه شهری هستم
+
+خوب فکر کن و تمام جوانب رو بررسی کن و با استدلال جواب بده
+
+و چند مورد رو به این شکل به من در مورد این نسخه جواب بده:
+
+۱. تشخیص احتمالی عارضه یا بیماری
+
+۲. تداخلات مهم داروها که باید به بیمار گوشزد شود
+
+۳. عوارض مهم و شایعی که حتما باید بیمار در مورد این داروها یادش باشد
+
+۴. اگر دارویی را باید در زمان خاصی از روز مصرف کرد
+
+۵. اگر دارویی رو باید با فاصله از غذا یا با غذا مصرف کرد
+
+۶. تعداد مصرف روزانه هر دارو
+
+۷. اگر برای عارضه‌ای که داروها میدهند نیاز به مدیریت خاصی وجود دارد که باید اطلاع بدم بگو
+''';
 
 class ChatService {
   static const String baseUrl = AppConstants.baseUrl;
   final AuthService _authService = AuthService();
   final Dio _dio;
 
+  // Add mock service reference
+  final MockChatService? _mockService;
+  final bool _useMockService;
+
   // Add the missing variables
   Set<String> _successfulEndpoints = {};
   Set<String> _failedEndpoints = {};
 
+  // Regular constructor
   ChatService()
-      : _dio = Dio(BaseOptions(
+      : _mockService = null,
+        _useMockService = false,
+        _dio = Dio(BaseOptions(
           baseUrl: AppConstants.baseUrl,
           connectTimeout: const Duration(seconds: 5),
           receiveTimeout: const Duration(seconds: 10),
@@ -57,7 +88,25 @@ class ChatService {
     ));
   }
 
+  // New constructor that takes a MockChatService
+  ChatService.fromMock(MockChatService mockService)
+      : _mockService = mockService,
+        _useMockService = true,
+        _dio = Dio(BaseOptions(
+          baseUrl: AppConstants.baseUrl,
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 10),
+          contentType: 'application/json',
+        )) {
+    AppLogger.i('Using MockChatService for offline operation');
+  }
+
   Future<List<Chat>> getUserChats() async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to get user chats');
+      return _mockService!.getUserChats();
+    }
+
     AppLogger.i('Fetching user chats');
     final token = await _authService.getToken();
 
@@ -135,6 +184,11 @@ class ChatService {
   }
 
   Future<Chat?> createChat(String title) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to create chat: $title');
+      return _mockService!.createChat(title);
+    }
+
     AppLogger.i('Creating a new chat with title: $title');
     final token = await _authService.getToken();
 
@@ -215,6 +269,23 @@ class ChatService {
   }
 
   Future<void> deleteChat(String chatId) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to delete chat: $chatId');
+      // Try to parse the ID or use a fallback ID
+      int numericId = 1;
+      try {
+        numericId = int.parse(chatId);
+      } catch (e) {
+        AppLogger.w('Invalid chat ID format: $chatId, using default');
+      }
+
+      final deleted = await _mockService!.deleteChat(numericId);
+      if (!deleted) {
+        throw Exception('Failed to delete chat: Chat not found');
+      }
+      return;
+    }
+
     final token = await _authService.getToken();
     if (token == null) {
       AppLogger.w('Attempted to delete chat while not authenticated');
@@ -370,8 +441,166 @@ class ChatService {
     }
   }
 
+  // Helper method to try different endpoint formats
+  Future<Message?> _tryMultipleEndpoints(
+    String chatId,
+    String content,
+    String role,
+    String contentType,
+    String token,
+  ) async {
+    // First, verify if the chat exists
+    try {
+      AppLogger.d('Verifying if chat exists: $chatId');
+      final chatResponse = await _dio.get(
+        '/chats/$chatId',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (chatResponse.statusCode != 200) {
+        AppLogger.e(
+            'Chat $chatId doesn\'t exist or is inaccessible: ${chatResponse.statusCode}');
+        AppLogger.d('Response: ${chatResponse.data}');
+      } else {
+        AppLogger.i('Chat $chatId exists and is accessible');
+      }
+    } catch (e) {
+      AppLogger.d('Error verifying chat: $e');
+      // Continue trying to send the message anyway
+    }
+
+    // List of possible endpoint patterns to try
+    final endpoints = [
+      '/messages', // Main endpoint with chat_id in body
+      '/chats/$chatId/messages', // RESTful endpoint
+      '/chat/$chatId/messages', // Alternative RESTful endpoint
+      'messages', // Without leading slash
+      'chats/$chatId/messages',
+      'chat/$chatId/messages',
+      '/api/messages', // Try with explicit /api prefix
+      '/api/chats/$chatId/messages',
+      '/api/chat/$chatId/messages',
+    ];
+
+    int? chatIdInt;
+    try {
+      chatIdInt = int.parse(chatId);
+    } catch (e) {
+      AppLogger.w('Failed to parse chatId to int: $e');
+      return null;
+    }
+
+    for (final endpoint in endpoints) {
+      try {
+        AppLogger.d('Trying endpoint: $endpoint');
+
+        // For endpoints with 'messages' in the root path, include chat_id in body
+        final Map<String, dynamic> data = {
+          'content': content,
+          'role': role,
+          'content_type': contentType,
+        };
+
+        if (endpoint == '/messages' ||
+            endpoint == 'messages' ||
+            endpoint == '/api/messages') {
+          data['chat_id'] = chatIdInt;
+        }
+
+        // Handle full URL vs relative path
+        final String url = endpoint.startsWith('/api')
+            ? endpoint.replaceFirst(
+                '/api', '') // Remove duplicate /api if present
+            : endpoint;
+
+        final response = await _dio.post(
+          url,
+          data: data,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+            },
+          ),
+        );
+
+        AppLogger.d('Response status from $endpoint: ${response.statusCode}');
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          AppLogger.i('Successfully created message using endpoint: $endpoint');
+
+          // Check if the response has a 'data' field
+          dynamic messageData = response.data;
+          if (response.data is Map && response.data.containsKey('data')) {
+            messageData = response.data['data'];
+          }
+
+          return Message.fromJson(messageData);
+        }
+      } catch (e) {
+        AppLogger.d('Endpoint $endpoint failed: $e');
+        if (e is DioException && e.response != null) {
+          AppLogger.d('Response data: ${e.response?.data}');
+        }
+      }
+    }
+
+    // As a last resort, use the http package instead of Dio
+    try {
+      AppLogger.d('Trying with http package instead of Dio');
+      final url = Uri.parse('${baseUrl.replaceFirst("/api", "")}/api/messages');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'chat_id': chatIdInt,
+          'content': content,
+          'role': role,
+          'content_type': contentType,
+        }),
+      );
+
+      AppLogger.d('HTTP package response status: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        dynamic messageData = data;
+        if (data is Map && data.containsKey('data')) {
+          messageData = data['data'];
+        }
+
+        return Message.fromJson(messageData);
+      }
+    } catch (e) {
+      AppLogger.e('HTTP package attempt failed: $e');
+    }
+
+    AppLogger.w('All endpoints failed for creating a message');
+    return null;
+  }
+
   Future<Message?> createMessage(String chatId, String content, String role,
       {String contentType = 'text'}) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to create message in chat: $chatId');
+      // Try to parse the ID or use a fallback ID
+      int numericId = 1;
+      try {
+        numericId = int.parse(chatId);
+      } catch (e) {
+        AppLogger.w('Invalid chat ID format: $chatId, using default');
+      }
+
+      return _mockService!.sendTextMessage(numericId, content);
+    }
+
     AppLogger.i(
         'Creating a new message in chat: $chatId with content type: $contentType');
     final token = await _authService.getToken();
@@ -381,14 +610,13 @@ class ChatService {
       return null;
     }
 
+    // Verify token validity and check if the chat ID exists
     try {
-      final response = await _dio.post(
-        '/chats/$chatId/messages',
-        data: {
-          'content': content,
-          'role': role,
-          'content_type': contentType,
-        },
+      AppLogger.i('Verifying authentication token and chat access');
+
+      // First, verify token is valid
+      final tokenVerifyResponse = await _dio.get(
+        '/auth/verify',
         options: Options(
           headers: {
             'Authorization': 'Bearer $token',
@@ -396,49 +624,50 @@ class ChatService {
         ),
       );
 
-      AppLogger.d('Create message response status: ${response.statusCode}');
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        AppLogger.d('Create message response data: ${response.data}');
-        final message = Message.fromJson(response.data);
-        AppLogger.i('Successfully created message: ${message.id}');
-        return message;
-      } else if (response.statusCode == 404 || response.statusCode == 405) {
-        // Try alternative endpoint format
-        AppLogger.w(
-            'Message creation endpoint not found (${response.statusCode}). Trying alternative endpoint.');
-        final alternativeResponse = await _dio.post(
-          '/api/chat/$chatId/messages', // Try alternative endpoint format
-          data: {
-            'content': content,
-            'role': role,
-          },
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
-        );
-
-        if (alternativeResponse.statusCode == 201 ||
-            alternativeResponse.statusCode == 200) {
-          AppLogger.i(
-              'Successfully created message using alternative endpoint');
-          return Message.fromJson(alternativeResponse.data);
-        }
-        AppLogger.w(
-            'Unable to create message. Both endpoints returned errors.');
-        return null;
-      } else if (response.statusCode == 401) {
-        AppLogger.w(
-            'Authentication failed (401) when creating message. Token may be invalid.');
-        await _authService.logout(); // Force logout on auth failure
-        return null;
-      } else {
-        AppLogger.w(
-            'Unexpected status code when creating message: ${response.statusCode}');
+      if (tokenVerifyResponse.statusCode != 200) {
+        AppLogger.e(
+            'Token verification failed: ${tokenVerifyResponse.statusCode}');
+        // Try to refresh the token or force user to login again
+        await _authService.logout();
         return null;
       }
+
+      AppLogger.i('Token verified successfully');
+
+      // Next, check if the chat exists and is accessible
+      final chatResponse = await _dio.get(
+        '/chats/$chatId',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (chatResponse.statusCode != 200) {
+        AppLogger.e(
+            'Chat $chatId not found or not accessible: ${chatResponse.statusCode}');
+        AppLogger.d('Chat response: ${chatResponse.data}');
+        // The chat ID might not exist or user doesn't have permission
+      } else {
+        AppLogger.i('Chat $chatId exists and is accessible');
+      }
+    } catch (e) {
+      AppLogger.d('Error in pre-checks: $e');
+      // Continue anyway, the message creation endpoints will perform their own validation
+    }
+
+    try {
+      // Try multiple endpoints to find one that works
+      final message = await _tryMultipleEndpoints(
+          chatId, content, role, contentType, token);
+
+      if (message != null) {
+        return message;
+      }
+
+      AppLogger.e('Failed to create message: all endpoints returned errors');
+      return null;
     } catch (e) {
       if (e is DioException) {
         AppLogger.e('Error creating message: ${e.message}');
@@ -453,6 +682,7 @@ class ChatService {
         AppLogger.d('DioException type: ${e.type}');
         if (e.response != null) {
           AppLogger.d('Error response: ${e.response?.data}');
+          AppLogger.d('Response data: ${e.response?.data}');
         }
       } else {
         AppLogger.e('Unexpected error creating message: $e');
@@ -462,6 +692,19 @@ class ChatService {
   }
 
   Future<Message?> uploadImageMessage(String chatId, String imagePath) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to upload image in chat: $chatId');
+      // Try to parse the ID or use a fallback ID
+      int numericId = 1;
+      try {
+        numericId = int.parse(chatId);
+      } catch (e) {
+        AppLogger.w('Invalid chat ID format: $chatId, using default');
+      }
+
+      return _mockService!.sendImageMessage(numericId, imagePath);
+    }
+
     AppLogger.i('Uploading image message for chat: $chatId');
     final token = await _authService.getToken();
 
@@ -479,7 +722,7 @@ class ChatService {
       });
 
       final response = await _dio.post(
-        '/chats/$chatId/messages/image',
+        '/chats/$chatId/messages/image', // baseUrl already includes '/api'
         data: formData,
         options: Options(
           headers: {
@@ -508,7 +751,7 @@ class ChatService {
         });
 
         final alternativeResponse = await _dio.post(
-          '/api/chat/$chatId/messages/image', // Try alternative endpoint format
+          '/chat/$chatId/messages/image', // baseUrl already includes '/api'
           data: alternativeFormData,
           options: Options(
             headers: {
@@ -535,6 +778,13 @@ class ChatService {
   }
 
   Future<void> deleteMessage(String chatId, String messageId) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i(
+          'Using mock service to delete message: $messageId from chat: $chatId');
+      // Call mock method if added in the future
+      return;
+    }
+
     final token = await _authService.getToken();
     if (token == null) {
       AppLogger.w('Attempted to delete message while not authenticated');
@@ -543,8 +793,16 @@ class ChatService {
 
     try {
       AppLogger.i('Deleting message: $messageId from chat: $chatId');
+
+      // Note: In this case, we're constructing a full URL with http client directly
+      // baseUrl already contains "/api", so we need to be careful not to duplicate it
+      final url = Uri.parse('$baseUrl/chats/$chatId/messages/$messageId'
+          .replaceAll('/api/api/', '/api/'));
+
+      AppLogger.d('Delete message URL: $url');
+
       final response = await http.delete(
-        Uri.parse('$baseUrl/chats/$chatId/messages/$messageId'),
+        url,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -553,7 +811,7 @@ class ChatService {
 
       AppLogger.network(
         'DELETE',
-        '$baseUrl/chats/$chatId/messages/$messageId',
+        url.toString(),
         response.statusCode,
         body: response.body,
       );
@@ -578,6 +836,19 @@ class ChatService {
   }
 
   Future<List<Message>> getChatMessages(String chatId) async {
+    if (_useMockService && _mockService != null) {
+      AppLogger.i('Using mock service to get messages for chat: $chatId');
+      // Try to parse the ID or use a fallback ID
+      int numericId = 1;
+      try {
+        numericId = int.parse(chatId);
+      } catch (e) {
+        AppLogger.w('Invalid chat ID format: $chatId, using default');
+      }
+
+      return _mockService!.getChatMessages(numericId);
+    }
+
     AppLogger.i('Fetching messages for chat: $chatId');
     final token = await _authService.getToken();
 
@@ -587,34 +858,57 @@ class ChatService {
     }
 
     try {
+      // Increase timeout for potentially large responses
+      final options = Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 15),
+      );
+
       final response = await _dio.get(
-        '/chats/$chatId/messages',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-        ),
+        '/chats/$chatId/messages', // baseUrl already includes '/api'
+        options: options,
       );
 
       AppLogger.d('Messages response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         AppLogger.d('Messages response data: ${response.data}');
-        return (response.data as List)
-            .map((messageJson) => Message.fromJson(messageJson))
-            .toList();
+
+        // Check if we got a valid response
+        if (response.data is List) {
+          List<Message> messages = [];
+          for (var messageJson in response.data) {
+            try {
+              final message = Message.fromJson(messageJson);
+              // Log complete message content for debugging
+              if (message.role == 'assistant') {
+                AppLogger.d('Assistant message: [ID: ${message.id}] '
+                    'Length: ${message.content.length} chars');
+              }
+              messages.add(message);
+            } catch (e) {
+              AppLogger.e('Error parsing message: $e');
+              AppLogger.d('Problematic message JSON: $messageJson');
+            }
+          }
+          return messages;
+        } else {
+          AppLogger.e(
+              'Unexpected response format: ${response.data.runtimeType}');
+          return [];
+        }
       } else if (response.statusCode == 404) {
         // Endpoint not found - try alternative endpoint format
         AppLogger.w(
             'Messages endpoint not found (404). Trying alternative endpoint.');
 
+        // First fallback - try without '/api' prefix since baseUrl already has it
         final alternativeResponse = await _dio.get(
-          '/api/chats/$chatId/messages', // Try alternative endpoint format
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
+          '/chats/$chatId/messages?format=alternative', // Add query param to differentiate
+          options: options,
         );
 
         if (alternativeResponse.statusCode == 200) {
@@ -625,14 +919,10 @@ class ChatService {
               .toList();
         }
 
-        // Try a second alternative endpoint format
+        // Second fallback - try different path structure
         final secondAlternativeResponse = await _dio.get(
-          '/api/chat/$chatId/messages', // Another possible endpoint format
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
+          '/chat/$chatId/messages', // baseUrl already includes '/api'
+          options: options,
         );
 
         if (secondAlternativeResponse.statusCode == 200) {
@@ -839,5 +1129,88 @@ class ChatService {
     } catch (e) {
       AppLogger.e('Error caching endpoint $endpoint: $e');
     }
+  }
+
+  // Diagnostic method to test various API endpoints
+  Future<Map<String, dynamic>> runApiDiagnostics() async {
+    final results = <String, dynamic>{};
+    final token = await _authService.getToken();
+
+    if (token == null) {
+      return {'error': 'No authentication token available'};
+    }
+
+    // List of endpoints to test
+    final endpoints = [
+      // Auth endpoints
+      {'method': 'GET', 'path': '/auth/verify', 'name': 'Verify Token'},
+      {'method': 'GET', 'path': '/auth/me', 'name': 'Get User Info'},
+
+      // Chat endpoints
+      {'method': 'GET', 'path': '/chats', 'name': 'List Chats'},
+
+      // Server info
+      {'method': 'GET', 'path': '/health', 'name': 'Health Check'},
+    ];
+
+    for (final endpoint in endpoints) {
+      try {
+        final path = endpoint['path'] as String;
+        final method = endpoint['method'] as String;
+        final name = endpoint['name'] as String;
+
+        Response? response;
+
+        if (method == 'GET') {
+          response = await _dio.get(
+            path,
+            options: Options(
+              headers: {
+                'Authorization': 'Bearer $token',
+              },
+            ),
+          );
+        }
+
+        results[name] = {
+          'status': response?.statusCode,
+          'success': response?.statusCode == 200,
+          'data': response?.data,
+        };
+      } catch (e) {
+        // Get the endpoint name safely
+        String endpointName = 'Unknown Endpoint';
+        try {
+          endpointName = endpoint['name'] as String;
+        } catch (_) {}
+
+        if (e is DioException) {
+          results[endpointName] = {
+            'error': e.message,
+            'type': e.type.toString(),
+            'response': e.response?.statusCode,
+            'data': e.response?.data,
+          };
+        } else {
+          results[endpointName] = {'error': e.toString()};
+        }
+      }
+    }
+
+    // Add server info
+    results['Server Info'] = {
+      'baseUrl': baseUrl,
+      'timeout': _dio.options.connectTimeout?.inSeconds,
+    };
+
+    // Add user info
+    results['User Info'] = {
+      'token_available': token != null,
+      'token_length': token != null ? token.length : 0,
+    };
+
+    AppLogger.i(
+        'API Diagnostics completed: ${results.length} endpoints tested');
+    return results;
   }
 }

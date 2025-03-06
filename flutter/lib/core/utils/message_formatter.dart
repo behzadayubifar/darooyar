@@ -7,12 +7,41 @@ class MessageFormatter {
     return content.contains('-next-');
   }
 
+  /// Checks if a message is a prescription analysis response
+  static bool isPrescriptionAnalysis(String content) {
+    // Look for at least 3 of the 7 question patterns
+    final patterns = [
+      '۱. تشخیص احتمالی',
+      '۲. تداخلات مهم',
+      '۳. عوارض مهم',
+      '۴. اگر دارویی را باید در زمان خاصی',
+      '۵. اگر دارویی رو باید با فاصله از غذا',
+      '۶. تعداد مصرف روزانه',
+      '۷. اگر برای عارضه‌ای',
+    ];
+
+    int matchCount = 0;
+    for (final pattern in patterns) {
+      if (content.contains(pattern)) {
+        matchCount++;
+      }
+    }
+
+    // If at least 3 of the patterns are found, consider it a prescription analysis
+    return matchCount >= 3;
+  }
+
   /// Attempts to convert an unstructured AI message to the structured format
   /// Returns the original message if conversion is not possible
   static String formatAIMessage(String content) {
     // If already structured, return as is
     if (isStructuredFormat(content)) {
       return content;
+    }
+
+    // Check if this is a prescription analysis
+    if (isPrescriptionAnalysis(content)) {
+      return _formatPrescriptionAnalysis(content);
     }
 
     // Try to identify the sections in the unstructured message
@@ -56,5 +85,53 @@ class MessageFormatter {
 
     // Format the message in the structured format
     return '$medicationList\n-next-\n$infoSections';
+  }
+
+  /// Formats prescription analysis into structured format
+  static String _formatPrescriptionAnalysis(String content) {
+    // Look for common headers before the section numbers
+    final sectionHeaders = [
+      'بررسی نسخه:',
+      'با سلام همکار گرامی،',
+      'با بررسی داروهای موجود در نسخه،',
+      'لیست داروهای نسخه:',
+    ];
+
+    // Extract medication list
+    String medicationList = '';
+    for (final header in sectionHeaders) {
+      if (content.contains(header)) {
+        final parts = content.split('۱. تشخیص احتمالی');
+        if (parts.isNotEmpty) {
+          medicationList = parts[0].trim();
+          break;
+        }
+      }
+    }
+
+    // If no medication list found, try to extract everything before first numbered section
+    if (medicationList.isEmpty) {
+      final numbered = RegExp(r'۱\.\s+تشخیص');
+      final match = numbered.firstMatch(content);
+      if (match != null && match.start > 0) {
+        medicationList = content.substring(0, match.start).trim();
+      }
+    }
+
+    // If still empty, use a default placeholder
+    if (medicationList.isEmpty) {
+      medicationList = 'لیست داروهای نسخه';
+    }
+
+    // Get the analysis sections
+    String analysisSections = content;
+    if (medicationList != 'لیست داروهای نسخه') {
+      analysisSections = content
+          .substring(content.indexOf(medicationList) + medicationList.length)
+          .trim();
+    }
+
+    // Format the message in the structured format
+    return '$medicationList\n-next-\n$analysisSections';
   }
 }

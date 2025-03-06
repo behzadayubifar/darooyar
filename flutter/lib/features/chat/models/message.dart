@@ -42,4 +42,7 @@ class Message {
 
   bool get isImage => contentType == 'image';
   bool get isText => contentType == 'text';
+  bool get isError => contentType == 'error';
+  bool get isLoading => contentType == 'loading';
+  bool get isThinking => contentType == 'thinking';
 }

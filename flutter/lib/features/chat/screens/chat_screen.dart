@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/message_formatter.dart';
+import '../../prescription/presentation/widgets/expandable_panel.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../providers/chat_providers.dart';
@@ -43,7 +45,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  void _pickImage(ImageSource source) async {
     try {
       final pickedFile = await _imagePicker.pickImage(
         source: source,
@@ -134,17 +136,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessageContent(String content, bool isImage, bool isLoading) {
+  Widget _buildMessageContent(
+      String content, bool isImage, bool isLoading, bool isThinking) {
     if (isLoading) {
       return Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(
-            width: 20,
             height: 20,
+            width: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            content,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ],
+      );
+    }
+
+    if (isThinking) {
+      return Row(
+        children: [
+          SizedBox(
+            height: 20,
+            width: 20,
             child: CircularProgressIndicator(
               strokeWidth: 2,
               color: Colors.white,
+              // Animation that makes it pulse
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.7)),
             ),
           ),
           const SizedBox(width: 8),
@@ -191,9 +215,204 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     }
 
-    return Text(
-      content,
-      style: const TextStyle(color: Colors.white),
+    // Check if the message contains any of the structured AI content patterns
+    if (content.contains('۱. تشخیص احتمالی') ||
+        content.contains('۲. تداخلات مهم') ||
+        content.contains('۳. عوارض مهم') ||
+        MessageFormatter.isPrescriptionAnalysis(content) ||
+        MessageFormatter.isStructuredFormat(content)) {
+      // Format the message if needed
+      String formattedContent = MessageFormatter.isStructuredFormat(content)
+          ? content
+          : MessageFormatter.formatAIMessage(content);
+
+      // If we have a properly structured message, build expandable panels
+      if (MessageFormatter.isStructuredFormat(formattedContent)) {
+        // Split the content into sections based on the -next- delimiter
+        List<String> sections = formattedContent.split('-next-');
+
+        // The first section is typically the medication list or a summary
+        String header = sections.isNotEmpty ? sections[0].trim() : '';
+
+        // Create a list of expandable panels for each content section after the first
+        List<Widget> panels = [];
+
+        if (sections.length > 1) {
+          // Process the remaining sections
+          String remainingContent = sections.sublist(1).join('\n').trim();
+
+          // Look for section titles
+          List<String> sectionTitles = [
+            '۱. تشخیص احتمالی',
+            '۲. تداخلات مهم',
+            '۳. عوارض مهم',
+            '۴. زمان مصرف',
+            '۵. نحوه مصرف',
+            '۶. تعداد مصرف',
+            '۷. مدیریت عارضه',
+          ];
+
+          // Split into sections based on the numbered sections
+          Map<String, String> contentSections = {};
+          String currentSection = 'پاسخ داروخانه';
+          String currentContent = '';
+
+          // Process each line to extract sections
+          for (String line in remainingContent.split('\n')) {
+            bool isNewSection = false;
+
+            for (String title in sectionTitles) {
+              if (line.trim().startsWith(title)) {
+                // Save previous section if it has content
+                if (currentContent.isNotEmpty) {
+                  contentSections[currentSection] = currentContent.trim();
+                }
+
+                // Start new section
+                currentSection = line.trim();
+                currentContent = '';
+                isNewSection = true;
+                break;
+              }
+            }
+
+            if (!isNewSection) {
+              currentContent += '$line\n';
+            }
+          }
+
+          // Add the final section
+          if (currentContent.isNotEmpty) {
+            contentSections[currentSection] = currentContent.trim();
+          }
+
+          // Create a panel for each section
+          contentSections.forEach((title, content) {
+            // Choose a different color for each panel based on content
+            Color panelColor;
+            IconData panelIcon;
+
+            if (title.contains('تشخیص')) {
+              panelColor = Colors.blue;
+              panelIcon = Icons.medical_information;
+            } else if (title.contains('تداخلات')) {
+              panelColor = Colors.orange;
+              panelIcon = Icons.warning_amber;
+            } else if (title.contains('عوارض')) {
+              panelColor = Colors.red;
+              panelIcon = Icons.health_and_safety;
+            } else if (title.contains('زمان')) {
+              panelColor = Colors.purple;
+              panelIcon = Icons.access_time;
+            } else if (title.contains('نحوه')) {
+              panelColor = Colors.teal;
+              panelIcon = Icons.food_bank;
+            } else if (title.contains('تعداد')) {
+              panelColor = Colors.green;
+              panelIcon = Icons.numbers;
+            } else if (title.contains('مدیریت')) {
+              panelColor = Colors.brown;
+              panelIcon = Icons.settings;
+            } else {
+              panelColor = Colors.indigo;
+              panelIcon = Icons.info;
+            }
+
+            panels.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ExpandablePanel(
+                  title: title,
+                  content: content,
+                  color: panelColor,
+                  icon: panelIcon,
+                  initiallyExpanded: false,
+                ),
+              ),
+            );
+          });
+        }
+
+        // Return a column with the header text and all the panels
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header (first section with medications list)
+            if (header.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Text(
+                  header,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+
+            // Expandable panels for each section
+            ...panels,
+          ],
+        );
+      }
+    }
+
+    // Process Markdown-like formatting in text for regular messages
+    try {
+      // Format the text for better readability - especially AI responses
+      // This is a simple approach without using external packages
+
+      // Replace bold markers
+      final processedContent = content
+          .replaceAllMapped(
+            RegExp(r'\*\*(.*?)\*\*'),
+            (match) => match.group(1) ?? '', // Remove ** markers
+          )
+          // Replace bullet points with proper bullets
+          .replaceAllMapped(
+            RegExp(r'^\s*\*\s+(.*?)$', multiLine: true),
+            (match) => '• ${match.group(1) ?? ''}',
+          )
+          // Keep numbering in numbered lists
+          .replaceAllMapped(
+            RegExp(r'^\s*(\d+)\.\s+(.*?)$', multiLine: true),
+            (match) => '${match.group(1)}. ${match.group(2) ?? ''}',
+          );
+
+      return Text(
+        processedContent,
+        style: const TextStyle(
+          color: Colors.white,
+          height: 1.5, // Increased line height for better readability
+        ),
+      );
+    } catch (e) {
+      // Fallback to simple text if processing fails
+      return Text(
+        content,
+        style: const TextStyle(color: Colors.white),
+      );
+    }
+  }
+
+  Widget _buildErrorMessageContent(String content) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.error_outline,
+          color: Colors.white,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            content,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
     );
   }
 
@@ -258,41 +477,121 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (context, index) {
                       final message = messages[index];
                       final isUser = message.role == 'user';
+                      final isSystem = message.role == 'system';
                       final isImage = message.isImage;
-                      final isLoading = message.contentType == 'loading';
+                      final isLoading = message.isLoading;
+                      final isError = message.isError;
+                      final isThinking = message.isThinking;
 
                       return Align(
                         alignment: isUser
                             ? Alignment.centerRight
-                            : Alignment.centerLeft,
+                            : (message.role == 'assistant' &&
+                                    (message.content
+                                            .contains('۱. تشخیص احتمالی') ||
+                                        message.content
+                                            .contains('۲. تداخلات مهم') ||
+                                        message.content
+                                            .contains('۳. عوارض مهم') ||
+                                        MessageFormatter.isPrescriptionAnalysis(
+                                            message.content) ||
+                                        MessageFormatter.isStructuredFormat(
+                                            message.content)))
+                                ? Alignment.center
+                                : Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isUser
-                                ? AppTheme.primaryColor
-                                : Colors.grey[200],
+                            color: isError
+                                ? Colors.red[700]
+                                : isThinking
+                                    ? Colors.blue[700]
+                                    : isUser
+                                        ? AppTheme.primaryColor
+                                        : const Color.fromARGB(255, 36, 47, 61),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                            maxWidth: isThinking || isError
+                                ? MediaQuery.of(context).size.width * 0.75
+                                : message.role == 'assistant' &&
+                                        (message.content
+                                                .contains('۱. تشخیص احتمالی') ||
+                                            message.content
+                                                .contains('۲. تداخلات مهم') ||
+                                            message.content
+                                                .contains('۳. عوارض مهم') ||
+                                            MessageFormatter
+                                                .isPrescriptionAnalysis(
+                                                    message.content) ||
+                                            MessageFormatter.isStructuredFormat(
+                                                message.content))
+                                    ? MediaQuery.of(context).size.width * 0.85
+                                    : MediaQuery.of(context).size.width * 0.75,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildMessageContent(
-                                  message.content, isImage, isLoading),
+                              isError
+                                  ? _buildErrorMessageContent(message.content)
+                                  : _buildMessageContent(message.content,
+                                      isImage, isLoading, isThinking),
                               const SizedBox(height: 4),
-                              Text(
-                                message.createdAt
-                                    .toLocal()
-                                    .toString()
-                                    .split('.')[0],
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color:
-                                      isUser ? Colors.white70 : Colors.black54,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    message.createdAt
+                                        .toLocal()
+                                        .toString()
+                                        .split('.')[0],
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isUser || isError
+                                          ? Colors.white70
+                                          : Colors.black54,
+                                    ),
+                                  ),
+                                  if (isError) ...[
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () {
+                                        // Retry sending the failed message
+                                        final originalContent = message.content
+                                            .split('\n')
+                                            .first
+                                            .replaceFirst(
+                                                'خطا در ارسال پیام: ', '');
+                                        if (originalContent.isNotEmpty) {
+                                          ref
+                                              .read(messageListProvider(
+                                                      widget.chat.id)
+                                                  .notifier)
+                                              .sendMessage(originalContent);
+                                        }
+                                      },
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.refresh,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 2),
+                                          Text(
+                                            'تلاش مجدد',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),

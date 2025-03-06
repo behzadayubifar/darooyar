@@ -75,6 +75,13 @@ func main() {
 	protected.HandleFunc("GET /api/chats/{id}/messages", chatHandler.GetChatMessages)
 	protected.HandleFunc("POST /api/messages", chatHandler.CreateMessage)
 
+	// Additional chat routes with different path patterns for maximum compatibility
+	protected.HandleFunc("POST /api/chats/{id}/messages", chatHandler.CreateChatMessage)
+	protected.HandleFunc("POST /api/chat/{id}/messages", chatHandler.CreateChatMessage)
+	protected.HandleFunc("POST /messages", chatHandler.CreateMessage)
+	protected.HandleFunc("POST /chats/{id}/messages", chatHandler.CreateChatMessage)
+	protected.HandleFunc("POST /chat/{id}/messages", chatHandler.CreateChatMessage)
+
 	// Folder routes
 	protected.HandleFunc("POST /api/folders", folderHandler.CreateFolder)
 	protected.HandleFunc("GET /api/folders", folderHandler.GetUserFolders)
@@ -84,6 +91,7 @@ func main() {
 
 	// Auth and other routes
 	protected.HandleFunc("GET /api/auth/me", authHandler.GetMe)
+	protected.HandleFunc("GET /api/auth/verify", authHandler.VerifyToken)
 	protected.HandleFunc("POST /api/analyze-prescription/text", prescriptionHandler.AnalyzePrescriptionText)
 	protected.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
 	protected.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)

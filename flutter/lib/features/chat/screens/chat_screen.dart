@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
@@ -9,8 +8,6 @@ import '../../../core/utils/logger.dart';
 import '../../../core/utils/message_formatter.dart';
 import '../../prescription/presentation/widgets/expandable_panel.dart';
 import '../models/chat.dart';
-import '../models/message.dart';
-import '../providers/chat_providers.dart';
 import '../providers/message_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {

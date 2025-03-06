@@ -9,6 +9,7 @@ This is the API server for the دارویار (Darooyar) prescription analysis a
 - Go 1.16 or higher
 - Git
 - OpenAI API Key (for AI-powered features)
+- Liara Storage Account (for image storage)
 
 ### Installation
 
@@ -31,9 +32,13 @@ This is the API server for the دارویار (Darooyar) prescription analysis a
 
    ```
    OPENAI_API_KEY=your_openai_api_key_here
+   LIARA_ACCESS_KEY=your_liara_access_key_here
+   LIARA_SECRET_KEY=your_liara_secret_key_here
+   LIARA_ENDPOINT=your_liara_endpoint_here
+   LIARA_BUCKET_NAME=your_bucket_name_here
    ```
 
-   Replace `your_openai_api_key_here` with your actual OpenAI API key.
+   Replace the placeholder values with your actual API keys and configuration.
 
 4. Run the server:
    ```
@@ -51,6 +56,19 @@ GET /api/health
 ```
 
 Returns the status of the API server.
+
+### Chat Image Upload
+
+```
+POST /api/chats/{id}/messages/image
+Content-Type: multipart/form-data
+
+Form fields:
+- image: The image file to upload
+- role: The role of the message sender (defaults to "user")
+```
+
+Uploads an image to Liara storage and creates a message with the image URL.
 
 ### Analyze Prescription Text
 
@@ -109,6 +127,7 @@ Returns an AI-powered analysis of the prescription text using OpenAI.
 - `main.go`: Entry point of the application
 - `handlers/`: Contains API endpoint handlers
 - `models/`: Contains data models
+- `storage/`: Contains storage-related code (S3/Liara)
 
 ### Adding New Features
 
@@ -123,6 +142,16 @@ The server uses the OpenAI API for AI-powered features. The integration is imple
 1. Get an API key from OpenAI: https://platform.openai.com/
 2. Set the API key in the `.env` file
 3. Use the AI-powered endpoints
+
+### Liara Storage Integration
+
+The server uses Liara's S3-compatible storage for image uploads. To use this feature:
+
+1. Create a Liara storage account
+2. Create a bucket for storing images
+3. Get your access key, secret key, and endpoint URL
+4. Set the configuration in the `.env` file
+5. Use the image upload endpoints
 
 ## License
 

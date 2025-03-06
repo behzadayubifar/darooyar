@@ -113,41 +113,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
-  void _setupTextListeners() {
-    _usernameController.addListener(() {
-      setState(() {
-        _usernameError =
-            FormValidators.validateUsername(_usernameController.text);
-      });
-      _saveFormData();
-    });
-
-    _emailController.addListener(() {
-      setState(() {
-        _emailError = FormValidators.validateEmail(_emailController.text);
-      });
-      _saveFormData();
-    });
-
-    _passwordController.addListener(() {
-      setState(() {
-        _passwordError =
-            FormValidators.validatePassword(_passwordController.text);
-        _validateConfirmPassword();
-      });
-      _saveFormData();
-    });
-
-    _confirmPasswordController.addListener(() {
-      setState(() {
-        _validateConfirmPassword();
-      });
-    });
-
-    _firstNameController.addListener(_saveFormData);
-    _lastNameController.addListener(_saveFormData);
-  }
-
   void _validateConfirmPassword() {
     if (_confirmPasswordController.text.isEmpty) {
       _confirmPasswordError = 'لطفا تکرار رمز عبور را وارد کنید';
@@ -232,12 +197,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   void dispose() {
-    // Store references to the listener functions
-    final usernameListener = _usernameController.removeListener;
-    final emailListener = _emailController.removeListener;
-    final passwordListener = _passwordController.removeListener;
-    final confirmPasswordListener = _confirmPasswordController.removeListener;
-
     // Remove all listeners before disposing
     for (final controller in [
       _usernameController,

@@ -84,7 +84,7 @@ func GetChat(chatID int64, userID int64) (*models.ChatResponse, error) {
 
 	// Then get all messages for this chat
 	messagesQuery := `
-		SELECT id, chat_id, role, content, created_at
+		SELECT id, chat_id, role, content, content_type, created_at
 		FROM messages
 		WHERE chat_id = $1
 		ORDER BY created_at ASC`
@@ -97,16 +97,25 @@ func GetChat(chatID int64, userID int64) (*models.ChatResponse, error) {
 
 	for rows.Next() {
 		var msg models.Message
+		var contentType sql.NullString // In case NULL values exist in old records
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ChatID,
 			&msg.Role,
 			&msg.Content,
+			&contentType,
 			&msg.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
+
+		if contentType.Valid {
+			msg.ContentType = contentType.String
+		} else {
+			msg.ContentType = "text" // Default for old records
+		}
+
 		chat.Messages = append(chat.Messages, msg)
 	}
 
@@ -157,9 +166,14 @@ func GetUserChats(userID int64) ([]models.Chat, error) {
 // CreateMessage creates a new message in the database
 func CreateMessage(msg *models.MessageCreate) (*models.Message, error) {
 	query := `
-		INSERT INTO messages (chat_id, role, content, created_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, chat_id, role, content, created_at`
+		INSERT INTO messages (chat_id, role, content, content_type, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, chat_id, role, content, content_type, created_at`
+
+	contentType := msg.ContentType
+	if contentType == "" {
+		contentType = "text" // Default to text if not specified
+	}
 
 	now := time.Now()
 	var newMsg models.Message
@@ -168,12 +182,14 @@ func CreateMessage(msg *models.MessageCreate) (*models.Message, error) {
 		msg.ChatID,
 		msg.Role,
 		msg.Content,
+		contentType,
 		now,
 	).Scan(
 		&newMsg.ID,
 		&newMsg.ChatID,
 		&newMsg.Role,
 		&newMsg.Content,
+		&newMsg.ContentType,
 		&newMsg.CreatedAt,
 	)
 
@@ -231,7 +247,7 @@ func DeleteChat(chatID int64) error {
 // GetChatMessages retrieves all messages for a specific chat
 func GetChatMessages(chatID int64) ([]models.Message, error) {
 	query := `
-		SELECT id, chat_id, role, content, created_at
+		SELECT id, chat_id, role, content, content_type, created_at
 		FROM messages
 		WHERE chat_id = $1
 		ORDER BY created_at ASC`
@@ -245,16 +261,25 @@ func GetChatMessages(chatID int64) ([]models.Message, error) {
 	var messages []models.Message
 	for rows.Next() {
 		var msg models.Message
+		var contentType sql.NullString // In case NULL values exist in old records
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ChatID,
 			&msg.Role,
 			&msg.Content,
+			&contentType,
 			&msg.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
+
+		if contentType.Valid {
+			msg.ContentType = contentType.String
+		} else {
+			msg.ContentType = "text" // Default for old records
+		}
+
 		messages = append(messages, msg)
 	}
 

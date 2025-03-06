@@ -31,7 +31,12 @@ func main() {
 
 	// Run database migrations
 	if err := migrations.RunMigrations(); err != nil {
-		log.Fatalf("Failed to run database migrations: %v", err)
+		log.Fatalf("Failed to run SQL file database migrations: %v", err)
+	}
+
+	// Run in-memory migrations
+	if err := migrations.RunInMemoryMigrations(); err != nil {
+		log.Fatalf("Failed to run in-memory database migrations: %v", err)
 	}
 
 	// Create a new ServeMux (router)
@@ -81,6 +86,10 @@ func main() {
 	protected.HandleFunc("POST /messages", chatHandler.CreateMessage)
 	protected.HandleFunc("POST /chats/{id}/messages", chatHandler.CreateChatMessage)
 	protected.HandleFunc("POST /chat/{id}/messages", chatHandler.CreateChatMessage)
+	protected.HandleFunc("POST /api/chats/{id}/messages/image", chatHandler.UploadImageMessage)
+	protected.HandleFunc("POST /api/chat/{id}/messages/image", chatHandler.UploadImageMessage)
+	protected.HandleFunc("POST /chats/{id}/messages/image", chatHandler.UploadImageMessage)
+	protected.HandleFunc("POST /chat/{id}/messages/image", chatHandler.UploadImageMessage)
 
 	// Folder routes
 	protected.HandleFunc("POST /api/folders", folderHandler.CreateFolder)

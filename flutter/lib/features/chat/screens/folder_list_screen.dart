@@ -3,7 +3,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../providers/folder_providers.dart';
 import '../models/folder.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/logger.dart';
 
 class FolderListScreen extends ConsumerWidget {
   const FolderListScreen({Key? key}) : super(key: key);
@@ -381,7 +380,6 @@ class FolderListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final folderColor = folder.getColor() ?? AppTheme.primaryColor;
 
     return Card(

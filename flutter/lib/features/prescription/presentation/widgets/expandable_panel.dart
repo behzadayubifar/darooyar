@@ -27,49 +27,20 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   late AnimationController _controller;
   late Animation<double> _iconTurns;
   late Animation<double> _heightFactor;
-  late Animation<double> _borderRadius;
-  late Animation<Color?> _headerColor;
-  late Animation<Color?> _iconColor;
-  late Animation<Color?> _titleColor;
-  late Animation<double> _elevation;
   bool _isExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-
-    _heightFactor = _controller.drive(CurveTween(curve: Curves.easeInOut));
+    _heightFactor = _controller.drive(CurveTween(curve: Curves.easeIn));
     _iconTurns = _controller.drive(Tween<double>(begin: 0.0, end: 0.5)
-        .chain(CurveTween(curve: Curves.easeInOut)));
-    _borderRadius = _controller.drive(Tween<double>(begin: 16.0, end: 16.0)
-        .chain(CurveTween(curve: Curves.easeInOut)));
-    _elevation = _controller.drive(Tween<double>(begin: 2.0, end: 4.0)
-        .chain(CurveTween(curve: Curves.easeInOut)));
-
-    _headerColor = _controller.drive(ColorTween(
-      begin: widget.color.withOpacity(0.1),
-      end: widget.color,
-    ).chain(CurveTween(curve: Curves.easeInOut)));
-
-    _iconColor = _controller.drive(ColorTween(
-      begin: widget.color,
-      end: Colors.white,
-    ).chain(CurveTween(curve: Curves.easeInOut)));
-
-    _titleColor = _controller.drive(ColorTween(
-      begin: widget.color,
-      end: Colors.white,
-    ).chain(CurveTween(curve: Curves.easeInOut)));
-
-    _isExpanded = PageStorage.of(context).readState(context) as bool? ??
-        widget.initiallyExpanded;
-    if (_isExpanded) {
-      _controller.value = 1.0;
-    }
+        .chain(CurveTween(curve: Curves.easeIn)));
+    _isExpanded = PageStorage.of(context).readState(context) as bool? ?? false;
+    if (_isExpanded) _controller.value = 1.0;
   }
 
   @override
@@ -97,7 +68,7 @@ class _ExpandablePanelState extends State<ExpandablePanel>
           vertical: ResponsiveSize.vertical(1),
           horizontal: ResponsiveSize.horizontal(0.5)),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(_borderRadius.value),
+        borderRadius: BorderRadius.circular(16.0),
         boxShadow: [
           BoxShadow(
             color: widget.color.withOpacity(_isExpanded ? 0.2 : 0.1),
@@ -110,7 +81,7 @@ class _ExpandablePanelState extends State<ExpandablePanel>
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(_borderRadius.value),
+        borderRadius: BorderRadius.circular(16.0),
         clipBehavior: Clip.antiAlias,
         elevation: 0,
         child: Column(
@@ -125,13 +96,15 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                 builder: (BuildContext context, Widget? _) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: _isExpanded ? widget.color : _headerColor.value,
+                      color: _isExpanded
+                          ? widget.color
+                          : widget.color.withOpacity(0.1),
                       borderRadius: _isExpanded
                           ? BorderRadius.only(
-                              topLeft: Radius.circular(_borderRadius.value),
-                              topRight: Radius.circular(_borderRadius.value),
+                              topLeft: Radius.circular(16.0),
+                              topRight: Radius.circular(16.0),
                             )
-                          : BorderRadius.circular(_borderRadius.value),
+                          : BorderRadius.circular(16.0),
                     ),
                     child: Padding(
                       padding: EdgeInsets.symmetric(
@@ -263,8 +236,8 @@ class _ExpandablePanelState extends State<ExpandablePanel>
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(_borderRadius.value),
-                  bottomRight: Radius.circular(_borderRadius.value),
+                  bottomLeft: Radius.circular(16.0),
+                  bottomRight: Radius.circular(16.0),
                 ),
                 border: Border.all(
                   color: widget.color.withOpacity(0.2),

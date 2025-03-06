@@ -125,9 +125,8 @@ class NewPrescriptionScreen extends HookConsumerWidget {
 
                         isLoading.value = true;
                         try {
-                          final prescription = await ref.read(
-                              createPrescriptionFromImageProvider(
-                                  (image: image, title: title)));
+                          await ref.read(createPrescriptionFromImageProvider(
+                              (image: image, title: title)));
                           if (context.mounted) {
                             await Future.delayed(
                                 const Duration(milliseconds: 100));

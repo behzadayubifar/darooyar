@@ -1,7 +1,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat.dart';
 import '../services/chat_service.dart';
-import '../services/mock_chat_service.dart';
 import '../../../core/utils/logger.dart';
 import 'folder_providers.dart';
 
@@ -31,10 +31,30 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<Chat>>> {
     try {
       state = const AsyncValue.loading();
       final chats = await _chatService.getUserChats();
+
+      if (!mounted) return; // Check if the notifier is still mounted
+
+      // Update the state with the new data
       state = AsyncValue.data(chats);
-    } catch (e) {
-      print('Error loading chats: $e');
-      state = AsyncValue.data([]);
+
+      // Log successful refresh
+      AppLogger.i('Successfully refreshed ${chats.length} chats');
+    } catch (e, stackTrace) {
+      AppLogger.e('Error loading chats: $e');
+
+      if (!mounted) return; // Check if the notifier is still mounted
+
+      // Keep existing data if available, but mark as error
+      final currentChats = state.valueOrNull ?? [];
+      if (currentChats.isNotEmpty) {
+        AppLogger.i(
+            'Keeping ${currentChats.length} existing chats despite refresh error');
+        // Keep existing data but mark as error
+        state = AsyncValue.error(e, stackTrace);
+      } else {
+        // No existing data, set empty list
+        state = AsyncValue.data([]);
+      }
     }
   }
 

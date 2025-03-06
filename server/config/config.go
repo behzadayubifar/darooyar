@@ -14,6 +14,11 @@ type Config struct {
 	DBName       string
 	JWTSecret    string
 	OpenAIAPIKey string
+	// Liara Storage Configuration
+	LiaraAccessKey  string
+	LiaraSecretKey  string
+	LiaraEndpoint   string
+	LiaraBucketName string
 }
 
 var (
@@ -32,6 +37,11 @@ func GetConfig() *Config {
 			DBName:       getEnvOrDefault("DB_NAME", "darooyar"),
 			JWTSecret:    getEnvOrDefault("JWT_SECRET", ""),
 			OpenAIAPIKey: getEnvOrDefault("OPENAI_API_KEY", ""),
+			// Liara Storage Configuration
+			LiaraAccessKey:  getEnvOrDefault("LIARA_ACCESS_KEY", ""),
+			LiaraSecretKey:  getEnvOrDefault("LIARA_SECRET_KEY", ""),
+			LiaraEndpoint:   getEnvOrDefault("LIARA_ENDPOINT", ""),
+			LiaraBucketName: getEnvOrDefault("LIARA_BUCKET_NAME", ""),
 		}
 	})
 	return config

@@ -6,14 +6,18 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/darooyar/server/db"
 	"github.com/darooyar/server/models"
+	"github.com/darooyar/server/storage"
+	"github.com/google/uuid"
 )
 
 type ChatHandler struct{}
@@ -414,41 +418,41 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	aiURL := "https://api.avalai.ir/v1/completions"
 
 	// Prepare the AI prompt
-	promptText := fmt.Sprintf(`من مسئول فنی یک داروخانه شهری هستم
+	promptText := fmt.Sprintf(`\u0645\u0646 \u0645\u0633\u0626\u0648\u0644 \u0641\u0646\u06CC \u06CC\u06A9 \u062F\u0627\u0631\u0648\u062E\u0627\u0646\u0647 \u0634\u0647\u0631\u06CC \u0647\u0633\u062A\u0645
 
-خوب فکر کن و تمام جوانب رو بررسی کن و با استدلال جواب بده
+\u062E\u0648\u0628 \u0641\u06A9\u0631 \u06A9\u0646 \u0648 \u062A\u0645\u0627\u0645 \u062C\u0648\u0627\u0646\u0628 \u0631\u0648 \u0628\u0631\u0631\u0633\u06CC \u06A9\u0646 \u0648 \u0628\u0627 \u0627\u0633\u062A\u062F\u0644\u0627\u0644 \u062C\u0648\u0627\u0628 \u0628\u062F\u0647
 
-و به این شکل به من در مورد این نسخه جواب بده:
+\u0648 \u0628\u0647 \u0627\u06CC\u0646 \u0634\u06A9\u0644 \u0628\u0647 \u0645\u0646 \u062F\u0631 \u0645\u0648\u0631\u062F \u0627\u06CC\u0646 \u0646\u0633\u062E\u0647 \u062C\u0648\u0627\u0628 \u0628\u062F\u0647:
 
-بررسی نسخه: %s
+\u0628\u0631\u0631\u0633\u06CC \u0646\u0633\u062E\u0647: %s
 
-با سلام همکار گرامی،
+\u0628\u0627 \u0633\u0644\u0627\u0645 \u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC\u060C
 
-با بررسی داروهای موجود در نسخه، اطلاعات زیر را خدمت شما ارائه می‌دهم:
+\u0628\u0627 \u0628\u0631\u0631\u0633\u06CC \u062F\u0627\u0631\u0648\u0647\u0627\u06CC \u0645\u0648\u062C\u0648\u062F \u062F\u0631 \u0646\u0633\u062E\u0647\u060C \u0627\u0637\u0644\u0627\u0639\u0627\u062A \u0632\u06CC\u0631 \u0631\u0627 \u062E\u062F\u0645\u062A \u0634\u0645\u0627 \u0627\u0631\u0627\u0626\u0647 \u0645\u06CC\u062D\u0647\u0645:
 
-لیست داروهای نسخه:
-[اینجا لیست داروها را با توضیح مختصر هر دارو بنویس]
+\u0644\u06CC\u0633\u062A \u062F\u0627\u0631\u0648\u0647\u0627\u06CC \u0646\u0633\u062E\u0647:
+[\u0627\u06CC\u0646\u062C\u0627 \u0644\u06CC\u0633\u062A \u062F\u0627\u0631\u0648\u0647\u0627 \u0631\u0627 \u0628\u0627 \u062A\u0648\u0636\u06CC\u062D \u0645\u062E\u062A\u0635\u0631 \u0647\u0631 \u062F\u0627\u0631\u0648 \u0628\u0646\u0648\u06CC\u0633]
 
-۱. تشخیص احتمالی عارضه یا بیماری:
-[توضیح بده]
+\u06F1. \u062A\u0634\u062E\u06CC\u0635 \u0627\u062D\u062A\u0645\u0627\u0644\u06CC \u0639\u0627\u0631\u0636\u0647 \u06CC\u0627 \u0628\u06CC\u0645\u0627\u0631\u06CC:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۲. تداخلات مهم داروها که باید به بیمار گوشزد شود:
-[توضیح بده]
+\u06F2. \u062A\u062D\u0627\u062E\u0644\u0627\u062A \u0645\u0647\u0645 \u062F\u0627\u0631\u0648\u0647\u0627 \u06A9\u0647 \u0628\u0627\u06CC\u062F \u0628\u0647 \u0628\u06CC\u0645\u0627\u0631 \u06AF\u0648\u0634\u0632\u062F \u0634\u0648\u062F:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۳. عوارض مهم و شایعی که حتما باید بیمار در مورد این داروها یادش باشد:
-[توضیح بده]
+\u06F3. \u0639\u0648\u0627\u0631\u0636 \u0645\u0647\u0645 \u0648 \u0634\u0627\u06CC\u0639\u06CC \u06A9\u0647 \u062D\u062A\u0645\u0627 \u0628\u0627\u06CC\u062F \u0628\u06CC\u0645\u0627\u0631 \u062F\u0631 \u0645\u0648\u0631\u062F \u0627\u06CC\u0646 \u062F\u0627\u0631\u0648\u0647\u0627 \u06CC\u0627\u062D\u0634 \u0628\u0627\u0634\u062F:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۴. اگر دارویی را باید در زمان خاصی از روز مصرف کرد:
-[توضیح بده]
+\u06F4. \u0627\u06AF\u0631 \u062F\u0627\u0631\u0648\u06CC\u06CC \u0631\u0627 \u0628\u0627\u06CC\u062F \u062F\u0631 \u0632\u0645\u0627\u0646 \u062E\u0627\u0635\u06CC \u0627\u0632 \u0631\u0648\u0632 \u0645\u0635\u0631\u0641 \u06A9\u0631\u062F:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۵. اگر دارویی رو باید با فاصله از غذا یا با غذا مصرف کرد:
-[توضیح بده]
+\u06F5. \u0627\u06AF\u0631 \u062F\u0627\u0631\u0648\u06CC\u06CC \u0631\u0648 \u0628\u0627\u06CC\u062F \u0628\u0627 \u0641\u0627\u0635\u0644\u0647 \u0627\u0632 \u063A\u0630\u0627 \u06CC\u0627 \u0628\u0627 \u063A\u0630\u0627 \u0645\u0635\u0631\u0641 \u06A9\u0631\u062F:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۶. تعداد مصرف روزانه هر دارو:
-[توضیح بده]
+\u06F6. \u062A\u0639\u062F\u0627\u062F \u0645\u0635\u0631\u0641 \u0631\u0648\u0632\u0627\u0646\u0647 \u0647\u0631 \u062F\u0627\u0631\u0648:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
 
-۷. اگر برای عارضه‌ای که داروها میدهند نیاز به مدیریت خاصی وجود دارد که باید اطلاع بدم بگو:
-[توضیح بده]`, content)
+\u06F7. \u0627\u06AF\u0631 \u0628\u0631\u0627\u06CC \u0639\u0627\u0631\u0636\u0647\u200C\u0627\u06CC \u06A9\u0647 \u062F\u0627\u0631\u0648\u0647\u0627 \u0645\u06CC\u062F\u0647\u0646\u062F \u0646\u06CC\u0627\u0632 \u0628\u0647 \u0645\u062F\u06CC\u0631\u06CC\u062A \u062E\u0627\u0635\u06CC \u0648\u062C\u0648\u062F \u062F\u0627\u0631\u062F \u06A9\u0647 \u0628\u0627\u06CC\u062F \u0627\u0637\u0644\u0627\u0639 \u0628\u062F\u0645 \u0628\u06AF\u0648:
+[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]`, content)
 
 	// Define request payload - using the correct format with a "prompt" field
 	requestData := map[string]interface{}{
@@ -596,4 +600,160 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	}
 
 	log.Printf("Successfully added AI response to chat %d with message ID: %d", chatID, aiMessage.ID)
+}
+
+// UploadImageMessage handles image uploads for chat messages
+func (h *ChatHandler) UploadImageMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get user ID from context
+	userID, ok := r.Context().Value("user_id").(int64)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get chat ID from URL
+	chatIDStr := r.PathValue("id")
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid chat ID", http.StatusBadRequest)
+		return
+	}
+
+	// Verify chat ownership
+	_, err = db.GetChat(chatID, userID)
+	if err != nil {
+		http.Error(w, "Chat not found or unauthorized", http.StatusNotFound)
+		return
+	}
+
+	// Parse multipart form
+	err = r.ParseMultipartForm(10 << 20) // 10 MB max
+	if err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	// Get the image file from the request
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "No image file provided", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Get the role from the form (default to "user" if not provided)
+	role := r.FormValue("role")
+	if role == "" {
+		role = "user"
+	}
+
+	// Initialize S3 client
+	s3Client, err := storage.NewS3Client()
+	if err != nil {
+		log.Printf("Error initializing S3 client: %v", err)
+		// Fallback to local storage if S3 client initialization fails
+		h.handleLocalImageUpload(w, r, chatID, userID, file, header, role)
+		return
+	}
+
+	// Determine content type
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg" // Default content type
+	}
+
+	// Upload the image to S3
+	imageURL, err := s3Client.UploadFile(file, header.Filename, contentType)
+	if err != nil {
+		log.Printf("Error uploading image to S3: %v", err)
+		// Fallback to local storage if S3 upload fails
+		h.handleLocalImageUpload(w, r, chatID, userID, file, header, role)
+		return
+	}
+
+	// Create a message with the image URL
+	msgCreate := models.MessageCreate{
+		ChatID:      chatID,
+		Role:        role,
+		Content:     imageURL,
+		ContentType: "image",
+	}
+
+	// Save the message to the database
+	msg, err := db.CreateMessage(&msgCreate)
+	if err != nil {
+		http.Error(w, "Error creating message", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the created message
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(msg)
+}
+
+// handleLocalImageUpload is a fallback method for handling image uploads locally
+func (h *ChatHandler) handleLocalImageUpload(w http.ResponseWriter, r *http.Request, chatID int64, userID int64, file multipart.File, header *multipart.FileHeader, role string) {
+	// Generate a unique filename
+	filename := uuid.New().String() + filepath.Ext(header.Filename)
+
+	// Create uploads directory if it doesn't exist
+	uploadsDir := "uploads"
+	if _, err := os.Stat(uploadsDir); os.IsNotExist(err) {
+		os.Mkdir(uploadsDir, 0755)
+	}
+
+	// Create the file path
+	filePath := filepath.Join(uploadsDir, filename)
+
+	// Create a new file
+	dst, err := os.Create(filePath)
+	if err != nil {
+		http.Error(w, "Failed to save image", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	// Reset the file reader to the beginning
+	file.Seek(0, io.SeekStart)
+
+	// Copy the uploaded file to the destination file
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		http.Error(w, "Failed to save image", http.StatusInternalServerError)
+		return
+	}
+
+	// Create a message with the local file path
+	// In a production environment, you would use a proper URL
+	serverURL := os.Getenv("SERVER_URL")
+	if serverURL == "" {
+		serverURL = "http://localhost:8080"
+	}
+	imageURL := fmt.Sprintf("%s/%s/%s", serverURL, uploadsDir, filename)
+
+	// Create a message with the image URL
+	msgCreate := models.MessageCreate{
+		ChatID:      chatID,
+		Role:        role,
+		Content:     imageURL,
+		ContentType: "image",
+	}
+
+	// Save the message to the database
+	msg, err := db.CreateMessage(&msgCreate)
+	if err != nil {
+		http.Error(w, "Error creating message", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the created message
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(msg)
 }

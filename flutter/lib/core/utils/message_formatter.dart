@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
 /// Utility class for formatting AI messages
 class MessageFormatter {

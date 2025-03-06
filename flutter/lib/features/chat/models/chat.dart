@@ -35,8 +35,11 @@ class Chat {
           .toList();
     }
 
+    // Safely convert ID to string regardless of whether it's int or String in the JSON
+    String idString = json['id'].toString();
+
     return Chat(
-      id: json['id'].toString(),
+      id: idString,
       title: json['title'] ?? '',
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),

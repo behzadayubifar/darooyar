@@ -104,10 +104,10 @@ class ChatService {
   Future<List<Chat>> getUserChats() async {
     if (_useMockService && _mockService != null) {
       AppLogger.i('Using mock service to get user chats');
-      return _mockService!.getUserChats();
+      return _mockService.getUserChats();
     }
 
-    AppLogger.i('Fetching user chats');
+    AppLogger.i('Fetching user chats from API');
     final token = await _authService.getToken();
 
     if (token == null) {
@@ -117,7 +117,7 @@ class ChatService {
 
     try {
       final response = await _dio.get(
-        '/chats',
+        '/chats', // baseUrl already includes '/api'
         options: Options(
           headers: {
             'Authorization': 'Bearer $token',
@@ -125,56 +125,48 @@ class ChatService {
         ),
       );
 
-      AppLogger.d('Chats response status: ${response.statusCode}');
+      AppLogger.d('Get chats response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        AppLogger.d('Chats response data: ${response.data}');
-        return (response.data as List)
-            .map((chatJson) => Chat.fromJson(chatJson))
-            .toList();
-      } else if (response.statusCode == 404) {
-        // Endpoint not found - the API endpoint might not be implemented yet or has a different path
-        AppLogger.w('Chats endpoint not found (404). Check API endpoint path.');
-        // Check if the issue is with the API URL structure
-        final alternativeResponse = await _dio.get(
-          '/api/chat', // Try alternative endpoint format
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
-        );
+        // Check if response.data is a Map and contains 'data' key
+        if (response.data is Map && response.data.containsKey('data')) {
+          final List<dynamic> chatsJson = response.data['data'];
+          try {
+            return chatsJson.map((json) => Chat.fromJson(json)).toList();
+          } catch (parseError) {
+            AppLogger.e('Error parsing chat data: $parseError');
+            return [];
+          }
+        } else {
+          // Handle case where response doesn't have expected structure
+          AppLogger.w('Unexpected response format: ${response.data}');
 
-        if (alternativeResponse.statusCode == 200) {
-          AppLogger.i('Successfully fetched chats from alternative endpoint');
-          return (alternativeResponse.data as List)
-              .map((chatJson) => Chat.fromJson(chatJson))
-              .toList();
+          // If response.data is directly a List, try to use it
+          if (response.data is List) {
+            try {
+              return (response.data as List)
+                  .map((json) => Chat.fromJson(json))
+                  .toList();
+            } catch (parseError) {
+              AppLogger.e('Error parsing direct list data: $parseError');
+              return [];
+            }
+          }
+          return [];
         }
-        return [];
-      } else if (response.statusCode == 401) {
-        AppLogger.w('Authentication failed (401). Token may be invalid.');
-        await _authService.logout(); // Force logout on auth failure
-        return [];
       } else {
-        AppLogger.w('Unexpected status code: ${response.statusCode}');
+        AppLogger.w(
+            'Failed to fetch chats: ${response.statusCode} - ${response.data}');
         return [];
       }
     } catch (e) {
       if (e is DioException) {
-        AppLogger.e('Error fetching chats: ${e.message}');
-
-        // Check if there's a connection issue rather than a 404
+        AppLogger.e('DioException fetching chats: ${e.message}');
         if (e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.connectionError ||
             e.type == DioExceptionType.receiveTimeout) {
           AppLogger.w(
               'Connection issue when fetching chats. Check internet connection.');
-        }
-
-        AppLogger.d('DioException type: ${e.type}');
-        if (e.response != null) {
-          AppLogger.d('Error response: ${e.response?.data}');
         }
       } else {
         AppLogger.e('Unexpected error fetching chats: $e');
@@ -185,8 +177,8 @@ class ChatService {
 
   Future<Chat?> createChat(String title) async {
     if (_useMockService && _mockService != null) {
-      AppLogger.i('Using mock service to create chat: $title');
-      return _mockService!.createChat(title);
+      AppLogger.i('Using mock service to create chat');
+      return _mockService.createChat(title);
     }
 
     AppLogger.i('Creating a new chat with title: $title');
@@ -279,7 +271,7 @@ class ChatService {
         AppLogger.w('Invalid chat ID format: $chatId, using default');
       }
 
-      final deleted = await _mockService!.deleteChat(numericId);
+      final deleted = await _mockService.deleteChat(numericId);
       if (!deleted) {
         throw Exception('Failed to delete chat: Chat not found');
       }
@@ -598,7 +590,7 @@ class ChatService {
         AppLogger.w('Invalid chat ID format: $chatId, using default');
       }
 
-      return _mockService!.sendTextMessage(numericId, content);
+      return _mockService.sendTextMessage(numericId, content);
     }
 
     AppLogger.i(
@@ -702,7 +694,7 @@ class ChatService {
         AppLogger.w('Invalid chat ID format: $chatId, using default');
       }
 
-      return _mockService!.sendImageMessage(numericId, imagePath);
+      return _mockService.sendImageMessage(numericId, imagePath);
     }
 
     AppLogger.i('Uploading image message for chat: $chatId');

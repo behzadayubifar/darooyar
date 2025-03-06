@@ -109,7 +109,41 @@ class ChatListScreen extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () => ref.read(chatListProvider.notifier).loadChats(),
+            onRefresh: () async {
+              // Show a loading indicator
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('در حال بارگذاری گفتگوها...'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+
+              // Perform the refresh operation
+              await ref.read(chatListProvider.notifier).loadChats();
+
+              // Provide feedback on completion
+              if (!context.mounted) return;
+
+              // Check the state to see if there was an error
+              final state = ref.read(chatListProvider);
+              if (state is AsyncError) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'خطا در بارگذاری گفتگوها. لطفاً دوباره تلاش کنید.'),
+                    backgroundColor: AppTheme.errorColor,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('گفتگوها با موفقیت بارگذاری شدند.'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
             child: ListView.builder(
               padding: const EdgeInsets.all(8),
               itemCount: filteredChats.length,

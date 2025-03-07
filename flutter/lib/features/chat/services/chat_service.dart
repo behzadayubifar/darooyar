@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/logger.dart';
@@ -7,6 +8,7 @@ import '../models/chat.dart';
 import '../models/message.dart';
 import 'mock_chat_service.dart'; // Add import for MockChatService
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Add prescription response template
@@ -697,7 +699,7 @@ class ChatService {
       return _mockService.sendImageMessage(numericId, imagePath);
     }
 
-    AppLogger.i('Uploading image message for chat: $chatId');
+    AppLogger.i('Uploading image message for chat: $chatId, path: $imagePath');
     final token = await _authService.getToken();
 
     if (token == null) {
@@ -706,22 +708,61 @@ class ChatService {
     }
 
     try {
+      // Check if file exists
+      final file = File(imagePath);
+      if (!await file.exists()) {
+        AppLogger.e('Image file does not exist: $imagePath');
+        throw Exception('Image file does not exist');
+      }
+
+      // Get file info
+      final fileSize = await file.length();
+      final fileName = imagePath.split('/').last;
+      AppLogger.d(
+          'Image file: $fileName, size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+
+      // Determine content type based on file extension
+      String contentType = 'image/jpeg'; // Default
+      if (fileName.toLowerCase().endsWith('.png')) {
+        contentType = 'image/png';
+      } else if (fileName.toLowerCase().endsWith('.gif')) {
+        contentType = 'image/gif';
+      } else if (fileName.toLowerCase().endsWith('.webp')) {
+        contentType = 'image/webp';
+      }
+
+      AppLogger.d('Using content type: $contentType for file: $fileName');
+
       // Create form data with the image file
       final formData = FormData.fromMap({
-        'image': await MultipartFile.fromFile(imagePath, filename: 'image.jpg'),
+        'image': await MultipartFile.fromFile(
+          imagePath,
+          filename: fileName,
+          contentType: MediaType.parse(contentType),
+        ),
         'role': 'user',
         'content_type': 'image',
       });
 
+      // Log request details
+      AppLogger.d(
+          'Sending image upload request to: /chats/$chatId/messages/image');
+      AppLogger.d('Form data: ${formData.fields}');
+
+      // Set longer timeouts for image upload
+      final options = Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+        contentType: 'multipart/form-data',
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 2),
+      );
+
       final response = await _dio.post(
         '/chats/$chatId/messages/image', // baseUrl already includes '/api'
         data: formData,
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-          contentType: 'multipart/form-data',
-        ),
+        options: options,
       );
 
       AppLogger.d('Upload image response status: ${response.statusCode}');
@@ -736,8 +777,11 @@ class ChatService {
         AppLogger.w(
             'Image upload endpoint not found (404). Trying alternative endpoint.');
         final alternativeFormData = FormData.fromMap({
-          'image':
-              await MultipartFile.fromFile(imagePath, filename: 'image.jpg'),
+          'image': await MultipartFile.fromFile(
+            imagePath,
+            filename: fileName,
+            contentType: MediaType.parse(contentType),
+          ),
           'role': 'user',
           'content_type': 'image',
         });
@@ -745,12 +789,7 @@ class ChatService {
         final alternativeResponse = await _dio.post(
           '/chat/$chatId/messages/image', // baseUrl already includes '/api'
           data: alternativeFormData,
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-            contentType: 'multipart/form-data',
-          ),
+          options: options,
         );
 
         if (alternativeResponse.statusCode == 201 ||
@@ -758,13 +797,35 @@ class ChatService {
           AppLogger.i('Successfully uploaded image using alternative endpoint');
           return Message.fromJson(alternativeResponse.data);
         }
+
+        // Try another alternative endpoint if the first one fails
+        final alternativeResponse2 = await _dio.post(
+          '/api/chats/$chatId/messages/image',
+          data: alternativeFormData,
+          options: options,
+        );
+
+        if (alternativeResponse2.statusCode == 201 ||
+            alternativeResponse2.statusCode == 200) {
+          AppLogger.i(
+              'Successfully uploaded image using second alternative endpoint');
+          return Message.fromJson(alternativeResponse2.data);
+        }
       }
 
       AppLogger.w(
           'Failed to upload image: ${response.statusCode} - ${response.data}');
       return null;
     } catch (e) {
-      AppLogger.e('Error uploading image: $e');
+      if (e is DioException) {
+        AppLogger.e('DioException uploading image: ${e.message}');
+        AppLogger.d('DioException type: ${e.type}');
+        if (e.response != null) {
+          AppLogger.d('Error response: ${e.response?.data}');
+        }
+      } else {
+        AppLogger.e('Error uploading image: $e');
+      }
       return null;
     }
   }
@@ -879,6 +940,22 @@ class ChatService {
               if (message.role == 'assistant') {
                 AppLogger.d('Assistant message: [ID: ${message.id}] '
                     'Length: ${message.content.length} chars');
+
+                // Log more detailed message info for large responses
+                if (message.content.length > 1000) {
+                  AppLogger.d(
+                      '   Content starts with: ${message.content.substring(0, min(100, message.content.length))}');
+                  AppLogger.d(
+                      '   Content ends with: ${message.content.substring(max(0, message.content.length - 100))}');
+
+                  // Check if content might be truncated
+                  final bool mightBeTruncated = message.content.length > 2000 &&
+                      !message.content.contains('۷.');
+                  if (mightBeTruncated) {
+                    AppLogger.w(
+                        '   ⚠️ Content might be truncated. Length: ${message.content.length}');
+                  }
+                }
               }
               messages.add(message);
             } catch (e) {
@@ -1206,3 +1283,7 @@ class ChatService {
     return results;
   }
 }
+
+// Helper functions for safe substring operations
+int min(int a, int b) => a < b ? a : b;
+int max(int a, int b) => a > b ? a : b;

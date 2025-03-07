@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +21,7 @@ import (
 	"github.com/darooyar/server/models"
 	"github.com/darooyar/server/storage"
 	"github.com/google/uuid"
+	"github.com/sashabaranov/go-openai"
 )
 
 type ChatHandler struct{}
@@ -294,6 +298,49 @@ func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
 		messages = []models.Message{}
 	}
 
+	// Get the server base URL for local images
+	serverBaseURL := os.Getenv("SERVER_BASE_URL")
+	if serverBaseURL == "" {
+		serverBaseURL = "http://localhost:8080"
+	}
+
+	// Initialize S3 client
+	s3Client, err := storage.NewS3Client()
+	if err != nil {
+		log.Printf("Error initializing S3 client: %v", err)
+		// Continue without regenerating URLs for S3 objects, but still process local images
+	}
+
+	// Process each message to update URLs
+	for i, msg := range messages {
+		// Only process image messages with metadata
+		if msg.ContentType == "image" && msg.Metadata != nil {
+			// Check if it's a local image
+			isLocal, _ := msg.Metadata["isLocal"].(bool)
+			if isLocal {
+				// For local images, ensure they have the full server URL
+				if !strings.HasPrefix(msg.Content, "http") {
+					messages[i].Content = serverBaseURL + msg.Content
+					log.Printf("Updated local image URL: %s", messages[i].Content)
+				}
+			} else if s3Client != nil {
+				// For S3 images, generate a fresh pre-signed URL
+				objectKey, ok := msg.Metadata["objectKey"].(string)
+				if ok && objectKey != "" {
+					// Generate a fresh pre-signed URL valid for 24 hours
+					presignedURL, urlErr := s3Client.GetTemporaryURL(objectKey, 24*time.Hour)
+					if urlErr == nil {
+						// Update the content with the fresh URL
+						messages[i].Content = presignedURL
+						log.Printf("Regenerated pre-signed URL for image: %s", presignedURL)
+					} else {
+						log.Printf("Error generating pre-signed URL: %v", urlErr)
+					}
+				}
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(messages)
 }
@@ -418,47 +465,53 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	aiURL := "https://api.avalai.ir/v1/completions"
 
 	// Prepare the AI prompt
-	promptText := fmt.Sprintf(`\u0645\u0646 \u0645\u0633\u0626\u0648\u0644 \u0641\u0646\u06CC \u06CC\u06A9 \u062F\u0627\u0631\u0648\u062E\u0627\u0646\u0647 \u0634\u0647\u0631\u06CC \u0647\u0633\u062A\u0645
+	promptText := fmt.Sprintf(`من مسئول فنی یک داروخانه شهری هستم
 
-\u062E\u0648\u0628 \u0641\u06A9\u0631 \u06A9\u0646 \u0648 \u062A\u0645\u0627\u0645 \u062C\u0648\u0627\u0646\u0628 \u0631\u0648 \u0628\u0631\u0631\u0633\u06CC \u06A9\u0646 \u0648 \u0628\u0627 \u0627\u0633\u062A\u062F\u0644\u0627\u0644 \u062C\u0648\u0627\u0628 \u0628\u062F\u0647
+خوب فکر کن و تمام جوانب رو بررسی کن و با استدلال جواب بده
 
-\u0648 \u0628\u0647 \u0627\u06CC\u0646 \u0634\u06A9\u0644 \u0628\u0647 \u0645\u0646 \u062F\u0631 \u0645\u0648\u0631\u062F \u0627\u06CC\u0646 \u0646\u0633\u062E\u0647 \u062C\u0648\u0627\u0628 \u0628\u062F\u0647:
+به این نسخه تصویری نگاه کن و به من کمک کن. تصویر نسخه در این آدرس قابل مشاهده است: %s
 
-\u0628\u0631\u0631\u0633\u06CC \u0646\u0633\u062E\u0647: %s
+با سلام همکار گرامی،
 
-\u0628\u0627 \u0633\u0644\u0627\u0645 \u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC\u060C
+با بررسی داروهای موجود در نسخه، اطلاعات زیر را خدمت شما ارائه می‌دهم:
 
-\u0628\u0627 \u0628\u0631\u0631\u0633\u06CC \u062F\u0627\u0631\u0648\u0647\u0627\u06CC \u0645\u0648\u062C\u0648\u062F \u062F\u0631 \u0646\u0633\u062E\u0647\u060C \u0627\u0637\u0644\u0627\u0639\u0627\u062A \u0632\u06CC\u0631 \u0631\u0627 \u062E\u062F\u0645\u062A \u0634\u0645\u0627 \u0627\u0631\u0627\u0626\u0647 \u0645\u06CC\u062D\u0647\u0645:
+<داروها>
+لیست کامل داروها را بنویس و برای هر دارو یک توضیح کامل بنویس که شامل دسته دارویی، مکانیسم اثر و کاربرد اصلی آن باشد. حتما همه داروهای موجود در نسخه را بررسی کن و هیچ دارویی را از قلم نینداز.
+</داروها>
 
-\u0644\u06CC\u0633\u062A \u062F\u0627\u0631\u0648\u0647\u0627\u06CC \u0646\u0633\u062E\u0647:
-[\u0627\u06CC\u0646\u062C\u0627 \u0644\u06CC\u0633\u062A \u062F\u0627\u0631\u0648\u0647\u0627 \u0631\u0627 \u0628\u0627 \u062A\u0648\u0636\u06CC\u062D \u0645\u062E\u062A\u0635\u0631 \u0647\u0631 \u062F\u0627\u0631\u0648 \u0628\u0646\u0648\u06CC\u0633]
+<تشخیص>
+با توجه به ترکیب داروها، تشخیص احتمالی را با جزئیات کامل توضیح بده و دلیل استفاده از هر دارو را در درمان این عارضه شرح بده.
+</تشخیص>
 
-\u06F1. \u062A\u0634\u062E\u06CC\u0635 \u0627\u062D\u062A\u0645\u0627\u0644\u06CC \u0639\u0627\u0631\u0636\u0647 \u06CC\u0627 \u0628\u06CC\u0645\u0627\u0631\u06CC:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
+<تداخلات>
+تمام تداخلات بین داروهای نسخه را با جزئیات بررسی کن. برای هر تداخل، شدت آن، مکانیسم تداخل و راهکارهای مدیریت آن را توضیح بده. اگر تداخل مهمی وجود ندارد، به صراحت ذکر کن.
+</تداخلات>
 
-\u06F2. \u062A\u062D\u0627\u062E\u0644\u0627\u062A \u0645\u0647\u0645 \u062F\u0627\u0631\u0648\u0647\u0627 \u06A9\u0647 \u0628\u0627\u06CC\u062F \u0628\u0647 \u0628\u06CC\u0645\u0627\u0631 \u06AF\u0648\u0634\u0632\u062F \u0634\u0648\u062F:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
+<عوارض>
+عوارض شایع و مهم هر دارو را به تفکیک بنویس و توضیح بده که بیمار چگونه باید این عوارض را مدیریت کند. عوارض خطرناک که نیاز به مراجعه فوری به پزشک دارند را مشخص کن.
+</عوارض>
 
-\u06F3. \u0639\u0648\u0627\u0631\u0636 \u0645\u0647\u0645 \u0648 \u0634\u0627\u06CC\u0639\u06CC \u06A9\u0647 \u062D\u062A\u0645\u0627 \u0628\u0627\u06CC\u062F \u0628\u06CC\u0645\u0627\u0631 \u062F\u0631 \u0645\u0648\u0631\u062F \u0627\u06CC\u0646 \u062F\u0627\u0631\u0648\u0647\u0627 \u06CC\u0627\u062D\u0634 \u0628\u0627\u0634\u062F:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
+<زمان_مصرف>
+برای هر دارو، بهترین زمان مصرف را با دلیل آن توضیح بده. مثلا صبح، شب، قبل از خواب، یا در زمان‌های خاص دیگر.
+</زمان_مصرف>
 
-\u06F4. \u0627\u06AF\u0631 \u062F\u0627\u0631\u0648\u06CC\u06CC \u0631\u0627 \u0628\u0627\u06CC\u062F \u062F\u0631 \u0632\u0645\u0627\u0646 \u062E\u0627\u0635\u06CC \u0627\u0632 \u0631\u0648\u0632 \u0645\u0635\u0631\u0641 \u06A9\u0631\u062F:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
+<مصرف_با_غذا>
+برای هر دارو مشخص کن که آیا باید با غذا، با معده خالی، یا با فاصله از غذا مصرف شود و دلیل این توصیه را توضیح بده.
+</مصرف_با_غذا>
 
-\u06F5. \u0627\u06AF\u0631 \u062F\u0627\u0631\u0648\u06CC\u06CC \u0631\u0648 \u0628\u0627\u06CC\u062F \u0628\u0627 \u0641\u0627\u0635\u0644\u0647 \u0627\u0632 \u063A\u0630\u0627 \u06CC\u0627 \u0628\u0627 \u063A\u0630\u0627 \u0645\u0635\u0631\u0641 \u06A9\u0631\u062F:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
+<دوز_مصرف>
+دوز و تعداد دفعات مصرف هر دارو را به صورت دقیق بنویس و در صورت نیاز، توضیح بده که چرا این دوز توصیه شده است.
+</دوز_مصرف>
 
-\u06F6. \u062A\u0639\u062F\u0627\u062F \u0645\u0635\u0631\u0641 \u0631\u0648\u0632\u0627\u0646\u0647 \u0647\u0631 \u062F\u0627\u0631\u0648:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]
-
-\u06F7. \u0627\u06AF\u0631 \u0628\u0631\u0627\u06CC \u0639\u0627\u0631\u0636\u0647\u200C\u0627\u06CC \u06A9\u0647 \u062F\u0627\u0631\u0648\u0647\u0627 \u0645\u06CC\u062F\u0647\u0646\u062F \u0646\u06CC\u0627\u0632 \u0628\u0647 \u0645\u062F\u06CC\u0631\u06CC\u062A \u062E\u0627\u0635\u06CC \u0648\u062C\u0648\u062F \u062F\u0627\u0631\u062F \u06A9\u0647 \u0628\u0627\u06CC\u062F \u0627\u0637\u0644\u0627\u0639 \u0628\u062F\u0645 \u0628\u06AF\u0648:
-[\u062A\u0648\u0636\u06CC\u062D \u0628\u062F\u0647]`, content)
+<مدیریت_عارضه>
+توصیه‌های تکمیلی برای مدیریت بیماری یا عارضه را بنویس، مانند رژیم غذایی خاص، فعالیت‌های فیزیکی توصیه شده یا منع شده، و سایر نکات مهم برای بهبود اثربخشی درمان.
+</مدیریت_عارضه>`, content)
 
 	// Define request payload - using the correct format with a "prompt" field
 	requestData := map[string]interface{}{
-		"model":       "gemini-2.0-flash-thinking-exp-01-21",
+		"model":       "gemini-2.0-flash-thinking-exp-01-21", // Use the most advanced model for image understanding
 		"prompt":      promptText,
-		"max_tokens":  1500,
+		"max_tokens":  8000,
 		"temperature": 0.7,
 	}
 
@@ -577,29 +630,60 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 		analysisContent = "عذر می‌خواهم، در تحلیل این نسخه خطایی رخ داد. لطفا دوباره تلاش کنید."
 	}
 
-	// Log a sample of the analysis to check if it's being truncated
-	if len(analysisContent) > 100 {
-		log.Printf("Analysis received (sample): %s...", analysisContent[:100])
-		log.Printf("Analysis length: %d characters", len(analysisContent))
+	// Log the full response for debugging
+	log.Printf("Full AI response content (length: %d):", len(analysisContent))
+
+	// Check if the content might be truncated
+	if len(analysisContent) > 10 {
+		lastRune := []rune(analysisContent)[len([]rune(analysisContent))-1]
+		if lastRune != '.' && lastRune != '?' && lastRune != '!' &&
+			lastRune != '،' && lastRune != '\n' && lastRune != ':' {
+			log.Printf("WARNING: Image analysis content may be truncated, doesn't end with sentence terminator")
+			log.Printf("Last 50 characters: %s", analysisContent[len(analysisContent)-min(50, len(analysisContent)):])
+		}
+	}
+
+	// Log sample of content
+	if len(analysisContent) > 200 {
+		log.Printf("First 100 chars: %s", analysisContent[:100])
+		log.Printf("Last 100 chars: %s", analysisContent[len(analysisContent)-100:])
 	} else {
-		log.Printf("Analysis received: %s", analysisContent)
+		log.Printf("%s", analysisContent)
 	}
 
 	// Create a new message with the AI analysis
 	aiMsg := models.MessageCreate{
-		ChatID:  chatID,
-		Role:    "assistant",
-		Content: analysisContent,
+		ChatID:      chatID,
+		Role:        "assistant",
+		Content:     analysisContent,
+		ContentType: "text",
+		Metadata:    map[string]interface{}{"length": len(analysisContent)},
 	}
 
 	// Save the AI message to the database
 	aiMessage, err := db.CreateMessage(&aiMsg)
 	if err != nil {
-		log.Printf("Error creating AI response message: %v", err)
+		log.Printf("Error creating AI response message for image: %v", err)
 		return
 	}
 
-	log.Printf("Successfully added AI response to chat %d with message ID: %d", chatID, aiMessage.ID)
+	// Verify the saved content length matches the original
+	if len(aiMessage.Content) != len(analysisContent) {
+		log.Printf("WARNING: Content length mismatch! Original: %d, Saved: %d",
+			len(analysisContent), len(aiMessage.Content))
+
+		// Log more details about the truncation, if it occurred
+		if len(aiMessage.Content) < len(analysisContent) {
+			truncatedAt := len(aiMessage.Content)
+			log.Printf("Content was truncated at position %d", truncatedAt)
+			log.Printf("Content before truncation point: %s", analysisContent[max(0, truncatedAt-30):truncatedAt])
+			log.Printf("Content after truncation point that was lost: %s", analysisContent[truncatedAt:min(len(analysisContent), truncatedAt+30)])
+		}
+	} else {
+		log.Printf("Content length verified: original and saved lengths match (%d characters)", len(analysisContent))
+	}
+
+	log.Printf("Successfully added AI response for image to chat %d with message ID: %d", chatID, aiMessage.ID)
 }
 
 // UploadImageMessage handles image uploads for chat messages
@@ -676,12 +760,32 @@ func (h *ChatHandler) UploadImageMessage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Create a message with the image URL
+	// Get the object key from the URL
+	// Full URL format: https://storage.c2.liara.space/darooyar/uploads/image.jpg
+	// We need to extract the path after the bucket name
+	urlParts := strings.Split(imageURL, "/")
+	objectKey := strings.Join(urlParts[4:], "/") // Extract the path after the bucket name
+
+	// Generate a pre-signed URL that will work with private bucket
+	// Set expiration time to 24 hours
+	presignedURL, err := s3Client.GetTemporaryURL(objectKey, 24*time.Hour)
+	if err != nil {
+		log.Printf("Error generating pre-signed URL: %v", err)
+		http.Error(w, "Error generating pre-signed URL", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Generated pre-signed URL for image: %s", presignedURL)
+
+	// Store the object key in the database for future reference
+	// This way we can generate new pre-signed URLs when needed
 	msgCreate := models.MessageCreate{
 		ChatID:      chatID,
 		Role:        role,
-		Content:     imageURL,
+		Content:     presignedURL,
 		ContentType: "image",
+		// Store the object key as metadata so we can regenerate pre-signed URLs later
+		Metadata: map[string]interface{}{"objectKey": objectKey},
 	}
 
 	// Save the message to the database
@@ -695,54 +799,325 @@ func (h *ChatHandler) UploadImageMessage(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(msg)
+
+	// Process image with AI for prescription analysis
+	log.Printf("Processing prescription image for chat ID: %d, image URL: %s", chatID, presignedURL)
+	// Run image analysis in a goroutine to avoid blocking
+	go func() {
+		// Add a delay to ensure the frontend can fetch the new message first
+		time.Sleep(1 * time.Second)
+
+		// Process the image
+		if err := h.generateImageAIResponse(chatID, presignedURL, userID); err != nil {
+			log.Printf("Error generating AI response for image: %v", err)
+
+			// Create an error message to inform the user
+			errorMsg := models.MessageCreate{
+				ChatID:      chatID,
+				Role:        "assistant",
+				Content:     "عذر می‌خواهم، در تحلیل این نسخه تصویری خطایی رخ داد. لطفا دوباره تلاش کنید یا نسخه را به صورت متنی وارد کنید.",
+				ContentType: "text",
+			}
+
+			// Save the error message to the database
+			_, err := db.CreateMessage(&errorMsg)
+			if err != nil {
+				log.Printf("Error creating error message: %v", err)
+			}
+		}
+	}()
 }
 
-// handleLocalImageUpload is a fallback method for handling image uploads locally
-func (h *ChatHandler) handleLocalImageUpload(w http.ResponseWriter, r *http.Request, chatID int64, userID int64, file multipart.File, header *multipart.FileHeader, role string) {
-	// Generate a unique filename
-	filename := uuid.New().String() + filepath.Ext(header.Filename)
+// Helper method to generate AI responses for prescription images
+func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, userID int64) error {
+	log.Printf("Starting AI analysis for image at URL: %s", imageURL)
 
-	// Create uploads directory if it doesn't exist
-	uploadsDir := "uploads"
-	if _, err := os.Stat(uploadsDir); os.IsNotExist(err) {
-		os.Mkdir(uploadsDir, 0755)
+	// Get API key from environment variable
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Printf("No API key found for AI service")
+		return fmt.Errorf("no API key found")
 	}
 
-	// Create the file path
-	filePath := filepath.Join(uploadsDir, filename)
+	// Try different approaches for image analysis in order of preference
+	var analysisContent string
+	var err error
 
-	// Create a new file
+	// First try with openai client and multimodal approach
+	log.Println("Attempting to analyze image with Gemini multimodal approach")
+	analysisContent, err = h.tryMultimodalImageAnalysis(apiKey, imageURL)
+
+	// If that fails, fall back to text prompt approach
+	if err != nil || analysisContent == "" {
+		log.Printf("Multimodal approach failed: %v. Trying with text prompt approach", err)
+		analysisContent, err = h.tryTextPromptImageAnalysis(apiKey, imageURL)
+
+		// If that also fails, try direct HTTP approach as final fallback
+		if err != nil || analysisContent == "" {
+			log.Printf("Text prompt approach failed: %v. Trying direct HTTP approach", err)
+			analysisContent, err = h.tryDirectHTTPForImageAnalysis(apiKey, imageURL)
+
+			// If all approaches fail, provide a fallback error message
+			if err != nil || analysisContent == "" {
+				log.Printf("All image analysis approaches failed: %v", err)
+				analysisContent = "عذر می‌خواهم، در تحلیل این نسخه تصویری خطایی رخ داد. لطفا دوباره تلاش کنید یا نسخه را به صورت متنی وارد کنید."
+			}
+		}
+	}
+
+	// Log the full response for debugging
+	log.Printf("Full AI response content (length: %d):", len(analysisContent))
+
+	// Check if the content might be truncated
+	if len(analysisContent) > 10 {
+		lastRune := []rune(analysisContent)[len([]rune(analysisContent))-1]
+		if lastRune != '.' && lastRune != '?' && lastRune != '!' &&
+			lastRune != '،' && lastRune != '\n' && lastRune != ':' {
+			log.Printf("WARNING: Image analysis content may be truncated, doesn't end with sentence terminator")
+			log.Printf("Last 50 characters: %s", analysisContent[len(analysisContent)-min(50, len(analysisContent)):])
+		}
+	}
+
+	// Log sample of content
+	if len(analysisContent) > 200 {
+		log.Printf("First 100 chars: %s", analysisContent[:100])
+		log.Printf("Last 100 chars: %s", analysisContent[len(analysisContent)-100:])
+	} else {
+		log.Printf("%s", analysisContent)
+	}
+
+	// Create a new message with the AI analysis
+	aiMsg := models.MessageCreate{
+		ChatID:      chatID,
+		Role:        "assistant",
+		Content:     analysisContent,
+		ContentType: "text",
+		Metadata:    map[string]interface{}{"length": len(analysisContent)},
+	}
+
+	// Save the AI message to the database
+	aiMessage, err := db.CreateMessage(&aiMsg)
+	if err != nil {
+		log.Printf("Error creating AI response message for image: %v", err)
+		return err
+	}
+
+	// Verify the saved content length matches the original
+	if len(aiMessage.Content) != len(analysisContent) {
+		log.Printf("WARNING: Content length mismatch! Original: %d, Saved: %d",
+			len(analysisContent), len(aiMessage.Content))
+
+		// Log more details about the truncation, if it occurred
+		if len(aiMessage.Content) < len(analysisContent) {
+			truncatedAt := len(aiMessage.Content)
+			log.Printf("Content was truncated at position %d", truncatedAt)
+			log.Printf("Content before truncation point: %s", analysisContent[max(0, truncatedAt-30):truncatedAt])
+			log.Printf("Content after truncation point that was lost: %s", analysisContent[truncatedAt:min(len(analysisContent), truncatedAt+30)])
+		}
+	} else {
+		log.Printf("Content length verified: original and saved lengths match (%d characters)", len(analysisContent))
+	}
+
+	log.Printf("Successfully added AI response for image to chat %d with message ID: %d", chatID, aiMessage.ID)
+	return nil
+}
+
+// tryMultimodalImageAnalysis attempts to analyze the image using multimodal API
+func (h *ChatHandler) tryMultimodalImageAnalysis(apiKey string, imageURL string) (string, error) {
+	// Create OpenAI client with custom base URL
+	config := openai.DefaultConfig(apiKey)
+	config.BaseURL = "https://api.avalai.ir/v1"
+
+	// Configure HTTP client with longer timeouts for image processing
+	transport := &http.Transport{
+		TLSHandshakeTimeout: 20 * time.Second,
+		DisableKeepAlives:   false,
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	}
+
+	httpClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: transport,
+	}
+	config.HTTPClient = httpClient
+
+	client := openai.NewClientWithConfig(config)
+	log.Println("OpenAI client initialized for multimodal image analysis")
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	// First, download the image from the pre-signed URL
+	log.Printf("Downloading image from URL: %s", imageURL)
+
+	// Create HTTP request to download the image
+	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		log.Printf("Error creating download request: %v", err)
+		return "", err
+	}
+
+	// Send request to download the image
+	downloadResp, err := httpClient.Do(req)
+	if err != nil {
+		log.Printf("Error downloading image: %v", err)
+		return "", err
+	}
+	defer downloadResp.Body.Close()
+
+	if downloadResp.StatusCode != http.StatusOK {
+		log.Printf("Failed to download image, status code: %d", downloadResp.StatusCode)
+		return "", fmt.Errorf("failed to download image: status code %d", downloadResp.StatusCode)
+	}
+
+	// Read the image data
+	imageData, err := io.ReadAll(downloadResp.Body)
+	if err != nil {
+		log.Printf("Error reading image data: %v", err)
+		return "", err
+	}
+
+	log.Printf("Successfully downloaded image, size: %d bytes", len(imageData))
+
+	// Encode the image to base64
+	base64Image := base64.StdEncoding.EncodeToString(imageData)
+
+	// Create the image data URL with proper MIME type
+	mimeType := downloadResp.Header.Get("Content-Type")
+	if mimeType == "" || mimeType == "application/octet-stream" {
+		// Detect MIME type from file content based on image header bytes
+		mimeType = detectImageMimeType(imageData)
+	}
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
+
+	log.Printf("Converted image to base64 data URI with MIME type: %s", mimeType)
+
+	// This is specifically for Gemini models which support multimodal in this format
+	aiResp, err := client.CreateChatCompletion(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model: "gemini-2.0-flash-thinking-exp-01-21",
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role: openai.ChatMessageRoleSystem,
+					Content: "من مسئول فنی یک داروخانه شهری هستم. لطفا تصویر نسخه ارسالی را تحلیل کن و به صورت ساختار یافته پاسخ بده. پاسخ باید شامل این بخش‌ها باشد:\n\n" +
+						"<داروها>\nلیست کامل داروها را بنویس و برای هر دارو یک توضیح کامل بنویس که شامل دسته دارویی، مکانیسم اثر و کاربرد اصلی آن باشد. حتما همه داروهای موجود در نسخه را بررسی کن و هیچ دارویی را از قلم نینداز.\n</داروها>\n\n" +
+						"<تشخیص>\nبا توجه به ترکیب داروها، تشخیص احتمالی را با جزئیات کامل توضیح بده و دلیل استفاده از هر دارو را در درمان این عارضه شرح بده.\n</تشخیص>\n\n" +
+						"<تداخلات>\nتمام تداخلات بین داروهای نسخه را با جزئیات بررسی کن. برای هر تداخل، شدت آن، مکانیسم تداخل و راهکارهای مدیریت آن را توضیح بده. اگر تداخل مهمی وجود ندارد، به صراحت ذکر کن.\n</تداخلات>\n\n" +
+						"<عوارض>\nعوارض شایع و مهم هر دارو را به تفکیک بنویس و توضیح بده که بیمار چگونه باید این عوارض را مدیریت کند. عوارض خطرناک که نیاز به مراجعه فوری به پزشک دارند را مشخص کن.\n</عوارض>\n\n" +
+						"<زمان_مصرف>\nبرای هر دارو، بهترین زمان مصرف را با دلیل آن توضیح بده. مثلا صبح، شب، قبل از خواب، یا در زمان‌های خاص دیگر.\n</زمان_مصرف>\n\n" +
+						"<مصرف_با_غذا>\nبرای هر دارو مشخص کن که آیا باید با غذا، با معده خالی، یا با فاصله از غذا مصرف شود و دلیل این توصیه را توضیح بده.\n</مصرف_با_غذا>\n\n" +
+						"<دوز_مصرف>\nدوز و تعداد دفعات مصرف هر دارو را به صورت دقیق بنویس و در صورت نیاز، توضیح بده که چرا این دوز توصیه شده است.\n</دوز_مصرف>\n\n" +
+						"<مدیریت_عارضه>\nتوصیه‌های تکمیلی برای مدیریت بیماری یا عارضه را بنویس، مانند رژیم غذایی خاص، فعالیت‌های فیزیکی توصیه شده یا منع شده، و سایر نکات مهم برای بهبود اثربخشی درمان.\n</مدیریت_عارضه>",
+				},
+				{
+					Role: openai.ChatMessageRoleUser,
+					MultiContent: []openai.ChatMessagePart{
+						{
+							Type: openai.ChatMessagePartTypeText,
+							Text: "لطفا این نسخه تصویری را تحلیل کنید:",
+						},
+						{
+							Type: openai.ChatMessagePartTypeImageURL,
+							ImageURL: &openai.ChatMessageImageURL{
+								URL: dataURI,
+							},
+						},
+					},
+				},
+			},
+			MaxTokens:   8000,
+			Temperature: 0.7,
+		},
+	)
+
+	// Handle any errors
+	if err != nil {
+		log.Printf("Error calling AI service with multimodal approach: %v", err)
+
+		// Check for timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("API request timed out")
+		}
+		return "", fmt.Errorf("failed to get AI analysis: %v", err)
+	}
+
+	// Extract the response content
+	if len(aiResp.Choices) > 0 {
+		analysisContent := aiResp.Choices[0].Message.Content
+		log.Printf("Multimodal image analysis received (sample): %s...", analysisContent[:min(100, len(analysisContent))])
+		log.Printf("Multimodal image analysis length: %d characters", len(analysisContent))
+		return analysisContent, nil
+	}
+
+	log.Printf("Multimodal approach returned empty response")
+	return "", fmt.Errorf("empty response from multimodal analysis")
+}
+
+// Helper function to get the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// handleLocalImageUpload is a fallback method to save images locally if S3 upload fails
+func (h *ChatHandler) handleLocalImageUpload(w http.ResponseWriter, r *http.Request, chatID int64, userID int64, file multipart.File, header *multipart.FileHeader, role string) {
+	// Create uploads directory if it doesn't exist
+	uploadsDir := "./uploads"
+	if _, err := os.Stat(uploadsDir); os.IsNotExist(err) {
+		os.MkdirAll(uploadsDir, 0755)
+	}
+
+	// Generate a unique filename
+	fileExt := filepath.Ext(header.Filename)
+	newFilename := fmt.Sprintf("%s%s", uuid.New().String(), fileExt)
+	filePath := filepath.Join(uploadsDir, newFilename)
+
+	// Create new file
 	dst, err := os.Create(filePath)
 	if err != nil {
-		http.Error(w, "Failed to save image", http.StatusInternalServerError)
+		log.Printf("Error creating local file: %v", err)
+		http.Error(w, "Error saving image", http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
 
-	// Reset the file reader to the beginning
-	file.Seek(0, io.SeekStart)
+	// Reset file pointer to beginning
+	file.Seek(0, 0)
 
-	// Copy the uploaded file to the destination file
+	// Copy uploaded file data to new file
 	_, err = io.Copy(dst, file)
 	if err != nil {
-		http.Error(w, "Failed to save image", http.StatusInternalServerError)
+		log.Printf("Error copying file data: %v", err)
+		http.Error(w, "Error saving image", http.StatusInternalServerError)
 		return
 	}
 
-	// Create a message with the local file path
-	// In a production environment, you would use a proper URL
-	serverURL := os.Getenv("SERVER_URL")
-	if serverURL == "" {
-		serverURL = "http://localhost:8080"
-	}
-	imageURL := fmt.Sprintf("%s/%s/%s", serverURL, uploadsDir, filename)
+	// Generate relative URL path for the saved image
+	imageURL := fmt.Sprintf("/uploads/%s", newFilename)
+
+	// Store the local file path as the object key for consistency with S3 implementation
+	objectKey := fmt.Sprintf("local/%s", newFilename)
 
 	// Create a message with the image URL
 	msgCreate := models.MessageCreate{
 		ChatID:      chatID,
 		Role:        role,
-		Content:     imageURL,
+		Content:     imageURL, // Local URL - the frontend will need to handle this differently
 		ContentType: "image",
+		Metadata: map[string]interface{}{
+			"objectKey": objectKey,
+			"isLocal":   true,
+		},
 	}
 
 	// Save the message to the database
@@ -756,4 +1131,352 @@ func (h *ChatHandler) handleLocalImageUpload(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(msg)
+
+	// Process image with AI in a goroutine
+	go func() {
+		time.Sleep(1 * time.Second)
+
+		// Use the absolute URL for AI processing
+		serverBaseURL := os.Getenv("SERVER_BASE_URL")
+		if serverBaseURL == "" {
+			serverBaseURL = "http://localhost:8080"
+		}
+		absoluteImageURL := fmt.Sprintf("%s%s", serverBaseURL, imageURL)
+
+		if err := h.generateImageAIResponse(chatID, absoluteImageURL, userID); err != nil {
+			log.Printf("Error generating AI response for local image: %v", err)
+
+			// Create an error message if AI processing fails
+			errorMsg := models.MessageCreate{
+				ChatID:      chatID,
+				Role:        "assistant",
+				Content:     "عذر می‌خواهم، در تحلیل این نسخه تصویری خطایی رخ داد. لطفا دوباره تلاش کنید یا نسخه را به صورت متنی وارد کنید.",
+				ContentType: "text",
+			}
+
+			// Save the error message
+			_, err := db.CreateMessage(&errorMsg)
+			if err != nil {
+				log.Printf("Error creating error message: %v", err)
+			}
+		}
+	}()
+}
+
+// tryTextPromptImageAnalysis attempts to analyze the image using a text prompt with the URL
+func (h *ChatHandler) tryTextPromptImageAnalysis(apiKey string, imageURL string) (string, error) {
+	// Create OpenAI client with custom base URL
+	config := openai.DefaultConfig(apiKey)
+	config.BaseURL = "https://api.avalai.ir/v1"
+
+	// Configure HTTP client with longer timeouts for image processing
+	transport := &http.Transport{
+		TLSHandshakeTimeout: 20 * time.Second,
+		DisableKeepAlives:   false,
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	}
+
+	httpClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: transport,
+	}
+	config.HTTPClient = httpClient
+
+	client := openai.NewClientWithConfig(config)
+	log.Println("OpenAI client initialized for text prompt image analysis")
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	// Create a text prompt that includes the image URL
+	promptText := fmt.Sprintf(`من مسئول فنی یک داروخانه شهری هستم
+
+خوب فکر کن و تمام جوانب رو بررسی کن و با استدلال جواب بده
+
+به این نسخه تصویری نگاه کن و به من کمک کن. تصویر نسخه در این آدرس قابل مشاهده است: %s
+
+با سلام همکار گرامی،
+
+با بررسی داروهای موجود در نسخه، اطلاعات زیر را خدمت شما ارائه می‌دهم:
+
+<داروها>
+لیست کامل داروها را بنویس و برای هر دارو یک توضیح کامل بنویس که شامل دسته دارویی، مکانیسم اثر و کاربرد اصلی آن باشد. حتما همه داروهای موجود در نسخه را بررسی کن و هیچ دارویی را از قلم نینداز.
+</داروها>
+
+<تشخیص>
+با توجه به ترکیب داروها، تشخیص احتمالی را با جزئیات کامل توضیح بده و دلیل استفاده از هر دارو را در درمان این عارضه شرح بده.
+</تشخیص>
+
+<تداخلات>
+تمام تداخلات بین داروهای نسخه را با جزئیات بررسی کن. برای هر تداخل، شدت آن، مکانیسم تداخل و راهکارهای مدیریت آن را توضیح بده. اگر تداخل مهمی وجود ندارد، به صراحت ذکر کن.
+</تداخلات>
+
+<عوارض>
+عوارض شایع و مهم هر دارو را به تفکیک بنویس و توضیح بده که بیمار چگونه باید این عوارض را مدیریت کند. عوارض خطرناک که نیاز به مراجعه فوری به پزشک دارند را مشخص کن.
+</عوارض>
+
+<زمان_مصرف>
+برای هر دارو، بهترین زمان مصرف را با دلیل آن توضیح بده. مثلا صبح، شب، قبل از خواب، یا در زمان‌های خاص دیگر.
+</زمان_مصرف>
+
+<مصرف_با_غذا>
+برای هر دارو مشخص کن که آیا باید با غذا، با معده خالی، یا با فاصله از غذا مصرف شود و دلیل این توصیه را توضیح بده.
+</مصرف_با_غذا>
+
+<دوز_مصرف>
+دوز و تعداد دفعات مصرف هر دارو را به صورت دقیق بنویس و در صورت نیاز، توضیح بده که چرا این دوز توصیه شده است.
+</دوز_مصرف>
+
+<مدیریت_عارضه>
+توصیه‌های تکمیلی برای مدیریت بیماری یا عارضه را بنویس، مانند رژیم غذایی خاص، فعالیت‌های فیزیکی توصیه شده یا منع شده، و سایر نکات مهم برای بهبود اثربخشی درمان.
+</مدیریت_عارضه>`, imageURL)
+
+	// Use the ChatCompletion API with just the text prompt
+	resp, err := client.CreateChatCompletion(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model: "gemini-2.0-flash-thinking-exp-01-21",
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: promptText,
+				},
+			},
+			MaxTokens:   8000,
+			Temperature: 0.7,
+		},
+	)
+
+	// Handle any errors
+	if err != nil {
+		log.Printf("Error calling AI service with text prompt approach: %v", err)
+		return "", err
+	}
+
+	// Extract the response content
+	if len(resp.Choices) > 0 {
+		analysisContent := resp.Choices[0].Message.Content
+		log.Printf("Text prompt image analysis received (sample): %s...", analysisContent[:min(100, len(analysisContent))])
+		log.Printf("Text prompt image analysis length: %d characters", len(analysisContent))
+		return analysisContent, nil
+	}
+
+	log.Printf("Text prompt approach returned empty response")
+	return "", fmt.Errorf("empty response from text prompt analysis")
+}
+
+// tryDirectHTTPForImageAnalysis attempts to analyze the image using direct HTTP requests
+func (h *ChatHandler) tryDirectHTTPForImageAnalysis(apiKey string, imageURL string) (string, error) {
+	// Define the AI service URL
+	aiURL := "https://api.avalai.ir/v1/chat/completions"
+
+	// Create an HTTP client with appropriate timeout
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			TLSHandshakeTimeout: 20 * time.Second,
+			DisableKeepAlives:   false,
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 5,
+			IdleConnTimeout:     90 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+		},
+	}
+
+	// First, download the image from the pre-signed URL
+	log.Printf("Downloading image from URL for direct HTTP approach: %s", imageURL)
+
+	// Create HTTP request to download the image
+	downloadReq, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		log.Printf("Error creating download request: %v", err)
+		return "", err
+	}
+
+	// Send request to download the image
+	downloadResp, err := client.Do(downloadReq)
+	if err != nil {
+		log.Printf("Error downloading image: %v", err)
+		return "", err
+	}
+	defer downloadResp.Body.Close()
+
+	if downloadResp.StatusCode != http.StatusOK {
+		log.Printf("Failed to download image, status code: %d", downloadResp.StatusCode)
+		return "", fmt.Errorf("failed to download image: status code %d", downloadResp.StatusCode)
+	}
+
+	// Read the image data
+	imageData, err := io.ReadAll(downloadResp.Body)
+	if err != nil {
+		log.Printf("Error reading image data: %v", err)
+		return "", err
+	}
+
+	log.Printf("Successfully downloaded image for direct HTTP approach, size: %d bytes", len(imageData))
+
+	// Encode the image to base64
+	base64Image := base64.StdEncoding.EncodeToString(imageData)
+
+	// Create the image data URL with proper MIME type
+	mimeType := downloadResp.Header.Get("Content-Type")
+	if mimeType == "" || mimeType == "application/octet-stream" {
+		// Detect MIME type from file content based on image header bytes
+		mimeType = detectImageMimeType(imageData)
+	}
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
+
+	log.Printf("Converted image to base64 data URI with MIME type: %s", mimeType)
+
+	// Create a text prompt that includes the image URL
+	requestData := map[string]interface{}{
+		"model": "gemini-2.0-flash-thinking-exp-01-21",
+		"messages": []map[string]interface{}{
+			{
+				"role": "system",
+				"content": "من مسئول فنی یک داروخانه شهری هستم. لطفا تصویر نسخه ارسالی را تحلیل کن و به صورت ساختار یافته پاسخ بده. پاسخ باید شامل این بخش‌ها باشد:\n\n" +
+					"<داروها>\nلیست کامل داروها را بنویس و برای هر دارو یک توضیح کامل بنویس که شامل دسته دارویی، مکانیسم اثر و کاربرد اصلی آن باشد. حتما همه داروهای موجود در نسخه را بررسی کن و هیچ دارویی را از قلم نینداز.\n</داروها>\n\n" +
+					"<تشخیص>\nبا توجه به ترکیب داروها، تشخیص احتمالی را با جزئیات کامل توضیح بده و دلیل استفاده از هر دارو را در درمان این عارضه شرح بده.\n</تشخیص>\n\n" +
+					"<تداخلات>\nتمام تداخلات بین داروهای نسخه را با جزئیات بررسی کن. برای هر تداخل، شدت آن، مکانیسم تداخل و راهکارهای مدیریت آن را توضیح بده. اگر تداخل مهمی وجود ندارد، به صراحت ذکر کن.\n</تداخلات>\n\n" +
+					"<عوارض>\nعوارض شایع و مهم هر دارو را به تفکیک بنویس و توضیح بده که بیمار چگونه باید این عوارض را مدیریت کند. عوارض خطرناک که نیاز به مراجعه فوری به پزشک دارند را مشخص کن.\n</عوارض>\n\n" +
+					"<زمان_مصرف>\nبرای هر دارو، بهترین زمان مصرف را با دلیل آن توضیح بده. مثلا صبح، شب، قبل از خواب، یا در زمان‌های خاص دیگر.\n</زمان_مصرف>\n\n" +
+					"<مصرف_با_غذا>\nبرای هر دارو مشخص کن که آیا باید با غذا، با معده خالی، یا با فاصله از غذا مصرف شود و دلیل این توصیه را توضیح بده.\n</مصرف_با_غذا>\n\n" +
+					"<دوز_مصرف>\nدوز و تعداد دفعات مصرف هر دارو را به صورت دقیق بنویس و در صورت نیاز، توضیح بده که چرا این دوز توصیه شده است.\n</دوز_مصرف>\n\n" +
+					"<مدیریت_عارضه>\nتوصیه‌های تکمیلی برای مدیریت بیماری یا عارضه را بنویس، مانند رژیم غذایی خاص، فعالیت‌های فیزیکی توصیه شده یا منع شده، و سایر نکات مهم برای بهبود اثربخشی درمان.\n</مدیریت_عارضه>",
+			},
+			{
+				"role": "user",
+				"content": []map[string]interface{}{
+					{
+						"type": "text",
+						"text": "لطفا این نسخه تصویری را تحلیل کنید:",
+					},
+					{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": dataURI,
+						},
+					},
+				},
+			},
+		},
+		"max_tokens":  8000,
+		"temperature": 0.7,
+	}
+
+	// Convert request to JSON
+	requestBody, err := json.Marshal(requestData)
+	if err != nil {
+		log.Printf("Error marshaling AI request: %v", err)
+		return "", err
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequest("POST", aiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Printf("Error creating AI request: %v", err)
+		return "", err
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	// Log the request for debugging
+	log.Printf("Sending direct HTTP request to %s for image analysis", aiURL)
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error calling AI service: %v", err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("AI service returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", fmt.Errorf("AI service returned status %d", resp.StatusCode)
+	}
+
+	// Parse chat completion format
+	var chatResponse struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&chatResponse); err != nil {
+		log.Printf("Error decoding chat response: %v", err)
+		return "", err
+	}
+
+	if len(chatResponse.Choices) > 0 {
+		analysisContent := chatResponse.Choices[0].Message.Content
+		// Log a sample of the analysis
+		log.Printf("Direct HTTP image analysis received (sample): %s...", analysisContent[:min(100, len(analysisContent))])
+		log.Printf("Direct HTTP image analysis length: %d characters", len(analysisContent))
+		return analysisContent, nil
+	}
+
+	return "", fmt.Errorf("empty response from direct HTTP approach")
+}
+
+// detectImageMimeType attempts to determine the MIME type of an image based on its header bytes
+func detectImageMimeType(data []byte) string {
+	// Check for common image formats based on file signatures (magic numbers)
+	if len(data) > 2 {
+		// JPEG: Starts with FF D8 FF
+		if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+			return "image/jpeg"
+		}
+
+		// PNG: Starts with 89 50 4E 47 0D 0A 1A 0A
+		if len(data) > 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+			data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A {
+			return "image/png"
+		}
+
+		// GIF: Starts with GIF87a or GIF89a
+		if len(data) > 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 &&
+			(data[4] == 0x37 || data[4] == 0x39) && data[5] == 0x61 {
+			return "image/gif"
+		}
+
+		// WebP: Starts with RIFF????WEBP
+		if len(data) > 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+			data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
+			return "image/webp"
+		}
+
+		// BMP: Starts with BM
+		if len(data) > 2 && data[0] == 0x42 && data[1] == 0x4D {
+			return "image/bmp"
+		}
+	}
+
+	// If we can't determine the type, default to JPEG (most common for prescriptions)
+	log.Println("Could not determine image MIME type from content, defaulting to image/jpeg")
+	return "image/jpeg"
+}
+
+// max returns the larger of x or y.
+func max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }

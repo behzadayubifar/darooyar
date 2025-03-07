@@ -14,12 +14,13 @@ type Chat struct {
 }
 
 type Message struct {
-	ID          int64     `json:"id"`
-	ChatID      int64     `json:"chat_id"`
-	Role        string    `json:"role"` // "user" or "assistant"
-	Content     string    `json:"content"`
-	ContentType string    `json:"content_type,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64                  `json:"id"`
+	ChatID      int64                  `json:"chat_id"`
+	Role        string                 `json:"role"` // "user" or "assistant"
+	Content     string                 `json:"content"`
+	ContentType string                 `json:"content_type,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
 }
 
 type ChatCreate struct {
@@ -28,10 +29,11 @@ type ChatCreate struct {
 }
 
 type MessageCreate struct {
-	ChatID      int64  `json:"chat_id"`
-	Role        string `json:"role"`
-	Content     string `json:"content"`
-	ContentType string `json:"content_type,omitempty"`
+	ChatID      int64                  `json:"chat_id"`
+	Role        string                 `json:"role"`
+	Content     string                 `json:"content"`
+	ContentType string                 `json:"content_type,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type ChatResponse struct {

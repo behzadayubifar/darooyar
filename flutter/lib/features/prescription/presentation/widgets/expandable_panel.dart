@@ -248,7 +248,11 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                 ),
               ),
               child: Padding(
-                padding: EdgeInsets.all(ResponsiveSize.size(16)),
+                padding: EdgeInsets.fromLTRB(
+                    ResponsiveSize.size(16),
+                    ResponsiveSize.size(16),
+                    ResponsiveSize.size(16),
+                    ResponsiveSize.size(8)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -272,9 +276,9 @@ class _ExpandablePanelState extends State<ExpandablePanel>
                       showCursor: true,
                       enableInteractiveSelection: true,
                     ),
-                    SizedBox(height: ResponsiveSize.vertical(8)),
                     Container(
                       alignment: Alignment.centerRight,
+                      margin: EdgeInsets.only(top: ResponsiveSize.vertical(4)),
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                           maxWidth: ResponsiveSize.width(50),

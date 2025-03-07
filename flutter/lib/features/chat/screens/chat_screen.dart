@@ -13,6 +13,8 @@ import 'dart:io';
 import 'dart:math';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/message_migration_service.dart';
+import 'image_viewer_screen.dart';
+import '../widgets/chat_image_widget.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -58,6 +60,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'color': Colors.blue.shade700,
       'icon': Icons.info_outline
     },
+    'تشخیص': {'color': Colors.blue.shade700, 'icon': Icons.info_outline},
     'تداخلات': {'color': Colors.red.shade700, 'icon': Icons.warning_outlined},
     'تداخلات مهم': {
       'color': Colors.red.shade700,
@@ -77,6 +80,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'icon': Icons.healing_outlined
     },
     'عوارض شایع': {
+      'color': Colors.orange.shade700,
+      'icon': Icons.healing_outlined
+    },
+    'عوارض جانبی': {
       'color': Colors.orange.shade700,
       'icon': Icons.healing_outlined
     },
@@ -104,6 +111,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'color': Colors.indigo.shade700,
       'icon': Icons.format_list_numbered_outlined
     },
+    'دوز مصرف': {
+      'color': Colors.indigo.shade700,
+      'icon': Icons.format_list_numbered_outlined
+    },
     '۶. تعداد مصرف': {
       'color': Colors.indigo.shade700,
       'icon': Icons.format_list_numbered_outlined
@@ -121,7 +132,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'color': Colors.amber.shade700,
       'icon': Icons.lightbulb_outline
     },
+    'توصیه‌ها': {
+      'color': Colors.amber.shade700,
+      'icon': Icons.lightbulb_outline
+    },
+    'توصیه های مهم': {
+      'color': Colors.amber.shade700,
+      'icon': Icons.lightbulb_outline
+    },
     'نتیجه گیری': {
+      'color': Colors.pink.shade700,
+      'icon': Icons.check_circle_outline
+    },
+    'نتیجه‌گیری': {
       'color': Colors.pink.shade700,
       'icon': Icons.check_circle_outline
     },
@@ -140,6 +163,81 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     'داروهای تجویز شده': {
       'color': Colors.deepPurple.shade700,
       'icon': Icons.medication_outlined
+    },
+    'داروها': {
+      'color': Colors.deepPurple.shade700,
+      'icon': Icons.medication_outlined
+    },
+    'کنترل فشار خون': {
+      'color': Colors.red.shade700,
+      'icon': Icons.favorite_outline
+    },
+    'فشار خون': {'color': Colors.red.shade700, 'icon': Icons.favorite_outline},
+    'کنترل قند خون': {
+      'color': Colors.blue.shade700,
+      'icon': Icons.water_drop_outlined
+    },
+    'قند خون': {
+      'color': Colors.blue.shade700,
+      'icon': Icons.water_drop_outlined
+    },
+    'رژیم غذایی': {
+      'color': Colors.green.shade700,
+      'icon': Icons.restaurant_menu
+    },
+    'تغذیه': {'color': Colors.green.shade700, 'icon': Icons.restaurant_menu},
+    'ورزش': {'color': Colors.orange.shade700, 'icon': Icons.directions_run},
+    'فعالیت بدنی': {
+      'color': Colors.orange.shade700,
+      'icon': Icons.directions_run
+    },
+    'مراقبت‌های لازم': {
+      'color': Colors.teal.shade700,
+      'icon': Icons.shield_outlined
+    },
+    'مراقبت های لازم': {
+      'color': Colors.teal.shade700,
+      'icon': Icons.shield_outlined
+    },
+    'علائم هشدار': {
+      'color': Colors.red.shade700,
+      'icon': Icons.warning_amber_outlined
+    },
+    'علائم خطر': {
+      'color': Colors.red.shade700,
+      'icon': Icons.warning_amber_outlined
+    },
+    'پیگیری': {
+      'color': Colors.indigo.shade700,
+      'icon': Icons.event_available_outlined
+    },
+    'زمان مراجعه بعدی': {
+      'color': Colors.indigo.shade700,
+      'icon': Icons.event_available_outlined
+    },
+    'آزمایشات': {
+      'color': Colors.purple.shade700,
+      'icon': Icons.science_outlined
+    },
+    'آزمایش‌ها': {
+      'color': Colors.purple.shade700,
+      'icon': Icons.science_outlined
+    },
+    'تست‌های تشخیصی': {
+      'color': Colors.purple.shade700,
+      'icon': Icons.science_outlined
+    },
+    'عوامل خطر': {
+      'color': Colors.deepOrange.shade700,
+      'icon': Icons.dangerous_outlined
+    },
+    'مصرف با غذا': {
+      'color': Colors.amber.shade700,
+      'icon': Icons.restaurant_outlined
+    },
+    'مصرف_با_غذا': {
+      'color': Colors.amber.shade700,
+      'icon': Icons.restaurant_outlined
     },
   };
 
@@ -272,19 +370,468 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    // Replace stars with better decorative elements
-    content = content.replaceAll('***', '✧✧✧');
-    content = content.replaceAll('**', '✧✧');
-    content = content.replaceAll('*', '✧');
+    // Remove stars completely instead of replacing them with decorative elements
+    content = content.replaceAll('***', '');
+    content = content.replaceAll('**', '');
+    content = content.replaceAll('*', '');
+    content = content.replaceAll('✧✧✧', '');
+    content = content.replaceAll('✧✧', '');
+    content = content.replaceAll('✧', '');
 
-    // Split the content into paragraphs
-    final paragraphs =
-        content.split('\n\n').where((p) => p.trim().isNotEmpty).toList();
+    // Use the processTaggedContent method to handle all content
+    return _processTaggedContent(content);
+  }
 
-    // If there's only one short paragraph, just show it as text
-    if (paragraphs.length == 1 && paragraphs[0].length < 100) {
+  // Helper method to extract individual medications from a medication list
+  void _extractMedicationItems(
+      String medicationList, List<Map<String, String>> medicationItems) {
+    // Try to extract individual medications
+    // Look for numbered items like "1. دارو" or "۱. دارو" or "- دارو" or "• دارو"
+    final List<String> lines = medicationList.split('\n');
+
+    // Skip the first line if it's a title
+    int startIndex = 0;
+    if (lines.isNotEmpty &&
+        (lines[0].contains('لیست داروها') ||
+            lines[0].contains('داروهای نسخه') ||
+            lines[0].contains('داروهای تجویز شده'))) {
+      startIndex = 1;
+    }
+
+    String currentMedicationName = '';
+    String currentMedicationDetails = '';
+
+    for (int i = startIndex; i < lines.length; i++) {
+      final line = lines[i].trim();
+
+      // Check if this line starts a new medication
+      if (line.isEmpty) continue;
+
+      // Check for numbered items or bullet points
+      bool isNewMedication = RegExp(
+              r'^(\d+\.|\d+\-|۱\.|۲\.|۳\.|۴\.|۵\.|۶\.|۷\.|۸\.|۹\.|۰\.|\-|\•|\*|\✧)')
+          .hasMatch(line);
+
+      // Also check for lines that start with a medication name pattern
+      if (!isNewMedication) {
+        isNewMedication = line.contains('قرص') ||
+            line.contains('کپسول') ||
+            line.contains('شربت') ||
+            line.contains('آمپول') ||
+            line.contains('اسپری') ||
+            line.contains('پماد') ||
+            line.contains('قطره');
+      }
+
+      if (isNewMedication) {
+        // Save previous medication if exists
+        if (currentMedicationName.isNotEmpty) {
+          medicationItems.add({
+            'name': currentMedicationName,
+            'details': currentMedicationDetails.trim()
+          });
+        }
+
+        // Start new medication
+        currentMedicationName = line;
+        currentMedicationDetails = '';
+      } else if (currentMedicationName.isNotEmpty) {
+        // Add to current medication details
+        currentMedicationDetails += line + '\n';
+      }
+    }
+
+    // Add the last medication
+    if (currentMedicationName.isNotEmpty) {
+      medicationItems.add({
+        'name': currentMedicationName,
+        'details': currentMedicationDetails.trim()
+      });
+    }
+
+    // If we couldn't extract any medications but have content, create a single item
+    if (medicationItems.isEmpty && medicationList.isNotEmpty) {
+      String title = 'لیست داروها';
+      String content = medicationList;
+
+      // Try to extract a title
+      if (medicationList.contains(':')) {
+        final parts = medicationList.split(':');
+        if (parts.length > 1 && parts[0].length < 40) {
+          title = parts[0].trim();
+          content = parts.sublist(1).join(':').trim();
+        }
+      }
+
+      medicationItems.add({'name': title, 'details': content});
+    }
+  }
+
+  // Helper method to extract content between tags and create expandable panels
+  Widget _processTaggedContent(String content) {
+    // Define all the tags we want to process
+    final List<Map<String, dynamic>> tagDefinitions = [
+      {
+        'tag': 'داروها',
+        'title': 'داروها',
+        'color': Colors.deepPurple.shade700,
+        'icon': Icons.medication_outlined,
+      },
+      {
+        'tag': 'تشخیص',
+        'title': 'تشخیص احتمالی',
+        'color': Colors.blue.shade700,
+        'icon': Icons.info_outline,
+      },
+      {
+        'tag': 'تداخلات',
+        'title': 'تداخلات دارویی',
+        'color': Colors.red.shade700,
+        'icon': Icons.warning_outlined,
+      },
+      {
+        'tag': 'عوارض',
+        'title': 'عوارض دارویی',
+        'color': Colors.orange.shade700,
+        'icon': Icons.healing_outlined,
+      },
+      {
+        'tag': 'زمان_مصرف',
+        'title': 'زمان مصرف',
+        'color': Colors.green.shade700,
+        'icon': Icons.access_time_outlined,
+      },
+      {
+        'tag': 'مصرف_با_غذا',
+        'title': 'مصرف با غذا',
+        'color': Colors.amber.shade700,
+        'icon': Icons.restaurant_outlined,
+      },
+      {
+        'tag': 'دوز_مصرف',
+        'title': 'دوز مصرف',
+        'color': Colors.indigo.shade700,
+        'icon': Icons.format_list_numbered_outlined,
+      },
+      {
+        'tag': 'مدیریت_عارضه',
+        'title': 'مدیریت عارضه',
+        'color': Colors.cyan.shade700,
+        'icon': Icons.health_and_safety_outlined,
+      },
+    ];
+
+    // Remove stars completely from the content
+    content = content.replaceAll('***', '');
+    content = content.replaceAll('**', '');
+    content = content.replaceAll('*', '');
+    content = content.replaceAll('✧✧✧', '');
+    content = content.replaceAll('✧✧', '');
+    content = content.replaceAll('✧', '');
+
+    // Check if any tags are present in the content (both <tag> and **tag** formats)
+    bool hasAnyTags = false;
+    for (var tagDef in tagDefinitions) {
+      String tag = tagDef['tag'] as String;
+      if (content.contains('<$tag>') && content.contains('</$tag>')) {
+        hasAnyTags = true;
+        break;
+      }
+      // Since we've removed all stars, we need to check for the tag without stars
+      if (content.contains(tag)) {
+        hasAnyTags = true;
+        break;
+      }
+    }
+
+    // Calculate the maximum width for the panel
+    final double panelWidth = MediaQuery.of(context).size.width * 0.75;
+
+    // Process the content to extract all tagged sections
+    String remainingContent = content;
+    List<Widget> contentWidgets = [];
+    List<String> processedParagraphs = [];
+
+    // First process <tag> format tags
+    while (true) {
+      int earliestTagPosition = remainingContent.length;
+      Map<String, dynamic>? earliestTagDef;
+
+      // Find the earliest tag in the remaining content
+      for (var tagDef in tagDefinitions) {
+        String tag = tagDef['tag'] as String;
+        int tagPosition = remainingContent.indexOf('<$tag>');
+        if (tagPosition != -1 && tagPosition < earliestTagPosition) {
+          earliestTagPosition = tagPosition;
+          earliestTagDef = tagDef;
+        }
+      }
+
+      // If no more <tag> format tags found, break this loop
+      if (earliestTagDef == null) {
+        break;
+      }
+
+      String tag = earliestTagDef['tag'] as String;
+      String openTag = '<$tag>';
+      String closeTag = '</$tag>';
+
+      // Add text before the tag
+      if (earliestTagPosition > 0) {
+        String beforeTagContent =
+            remainingContent.substring(0, earliestTagPosition).trim();
+        if (beforeTagContent.isNotEmpty) {
+          processedParagraphs.add(beforeTagContent);
+        }
+      }
+
+      // Extract content between tags
+      int startIndex = remainingContent.indexOf(openTag) + openTag.length;
+      int endIndex = remainingContent.indexOf(closeTag);
+
+      if (startIndex < endIndex) {
+        String taggedContent =
+            remainingContent.substring(startIndex, endIndex).trim();
+
+        // Log for debugging
+        AppLogger.d('Found <$tag> tags in content');
+        AppLogger.d('Tagged content length: ${taggedContent.length} chars');
+        AppLogger.d(
+            'Tagged content preview: ${taggedContent.substring(0, min(100, taggedContent.length))}...');
+
+        // Add expandable panel for the tagged content
+        contentWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: ExpandablePanel(
+              title: earliestTagDef['title'] as String,
+              content: taggedContent,
+              color: earliestTagDef['color'] as Color,
+              icon: earliestTagDef['icon'] as IconData,
+              initiallyExpanded: false,
+              width: panelWidth,
+            ),
+          ),
+        );
+
+        // Update remaining content to be after the closing tag
+        remainingContent =
+            remainingContent.substring(endIndex + closeTag.length);
+      } else {
+        // If tags are malformed, just remove the opening tag and continue
+        remainingContent =
+            remainingContent.substring(earliestTagPosition + openTag.length);
+      }
+    }
+
+    // Now process **tag** format tags in the remaining content
+    // Split the content into paragraphs for easier processing
+    List<String> paragraphs = remainingContent.split('\n\n');
+    remainingContent = '';
+
+    for (int i = 0; i < paragraphs.length; i++) {
+      String paragraph = paragraphs[i].trim();
+      bool processed = false;
+
+      // Check if this paragraph starts with a tag format (without stars now)
+      for (var tagDef in tagDefinitions) {
+        String tag = tagDef['tag'] as String;
+
+        // Check if paragraph starts with the tag
+        if (paragraph.startsWith(tag) && paragraph.length > tag.length) {
+          // Extract the content after the tag
+          String taggedContent = paragraph.substring(tag.length).trim();
+
+          // If the content starts with a colon, remove it
+          if (taggedContent.startsWith(':')) {
+            taggedContent = taggedContent.substring(1).trim();
+          }
+
+          // Log for debugging
+          AppLogger.d('Found $tag format in paragraph');
+          AppLogger.d('Tagged content length: ${taggedContent.length} chars');
+          AppLogger.d(
+              'Tagged content preview: ${taggedContent.substring(0, min(100, taggedContent.length))}...');
+
+          // Add expandable panel for the tagged content
+          contentWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: ExpandablePanel(
+                title: tagDef['title'] as String,
+                content: taggedContent,
+                color: tagDef['color'] as Color,
+                icon: tagDef['icon'] as IconData,
+                initiallyExpanded: false,
+                width: panelWidth,
+              ),
+            ),
+          );
+
+          processed = true;
+          break;
+        }
+      }
+
+      // If this paragraph wasn't processed as a tag, add it to the remaining content
+      if (!processed) {
+        if (paragraph.isNotEmpty) {
+          processedParagraphs.add(paragraph);
+        }
+      }
+    }
+
+    // Process remaining paragraphs into appropriate panels
+    if (processedParagraphs.isNotEmpty) {
+      // Group paragraphs by potential sections
+      Map<String, List<String>> sections = {};
+      String currentSection = 'نکات مهم';
+
+      for (String paragraph in processedParagraphs) {
+        // Try to identify if this paragraph is a section title
+        if (paragraph.contains(':') && paragraph.split(':')[0].length < 40) {
+          String potentialTitle = paragraph.split(':')[0].trim();
+          currentSection = potentialTitle;
+
+          // Initialize the section if it doesn't exist
+          sections.putIfAbsent(currentSection, () => []);
+
+          // Add the content after the colon
+          String content =
+              paragraph.substring(paragraph.indexOf(':') + 1).trim();
+          if (content.isNotEmpty) {
+            sections[currentSection]!.add(content);
+          }
+        }
+        // Check for bullet points or numbered items
+        else if (paragraph.startsWith('• ') ||
+            paragraph.startsWith('- ') ||
+            paragraph.startsWith('* ') ||
+            RegExp(r'^\d+\.').hasMatch(paragraph) ||
+            RegExp(r'^[۰-۹]+\.').hasMatch(paragraph)) {
+          // These are likely bullet points for "نکات مهم"
+          sections.putIfAbsent('نکات مهم', () => []);
+          sections['نکات مهم']!.add(paragraph);
+        }
+        // Check for conclusion-like paragraphs
+        else if (paragraph.contains('نتیجه') ||
+            paragraph.contains('خلاصه') ||
+            paragraph.contains('در پایان') ||
+            paragraph.contains('در نهایت')) {
+          sections.putIfAbsent('نتیجه‌گیری', () => []);
+          sections['نتیجه‌گیری']!.add(paragraph);
+        }
+        // Default case - add to current section
+        else {
+          sections.putIfAbsent(currentSection, () => []);
+          sections[currentSection]!.add(paragraph);
+        }
+      }
+
+      // Create panels for each section
+      int colorIndex = 0;
+      sections.forEach((title, paragraphs) {
+        // Skip empty sections
+        if (paragraphs.isEmpty) return;
+
+        // Combine paragraphs into one content string
+        String content = paragraphs.join('\n\n');
+
+        // Select a color and icon
+        Map<String, dynamic> style;
+        if (specificStyles.containsKey(title)) {
+          style = specificStyles[title]!;
+        } else {
+          // Try to find a partial match in specificStyles
+          String matchedTitle = '';
+          specificStyles.keys.forEach((key) {
+            if (title.contains(key) && key.length > matchedTitle.length) {
+              matchedTitle = key;
+            }
+          });
+
+          if (matchedTitle.isNotEmpty) {
+            style = specificStyles[matchedTitle]!;
+          } else {
+            // Ensure each panel gets a unique color by using the index
+            style = sectionStyles[colorIndex % sectionStyles.length];
+            colorIndex++;
+          }
+        }
+
+        // Create the panel
+        contentWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: ExpandablePanel(
+              title: title,
+              content: content,
+              color: style['color'] as Color,
+              icon: style['icon'] as IconData,
+              initiallyExpanded: false,
+              width: panelWidth,
+            ),
+          ),
+        );
+      });
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: contentWidgets,
+    );
+  }
+
+  Widget _buildMessageContent(
+      String content, bool isImage, bool isLoading, bool isThinking,
+      {bool isUser = false}) {
+    if (isImage) {
+      return ChatImageWidget(content: content);
+    }
+
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    }
+
+    if (isThinking) {
+      return Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              content,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Process content with tags (both <tag> and **tag** formats)
+    // First remove all stars from the content
+    content = content.replaceAll('***', '');
+    content = content.replaceAll('**', '');
+    content = content.replaceAll('*', '');
+    content = content.replaceAll('✧✧✧', '');
+    content = content.replaceAll('✧✧', '');
+    content = content.replaceAll('✧', '');
+
+    // For user messages, use simple text display
+    if (isUser) {
       return Text(
-        paragraphs[0],
+        content,
         style: const TextStyle(
           color: Colors.white,
           height: 1.5,
@@ -292,800 +839,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     }
 
-    // Process paragraphs into sections
-    List<Map<String, String>> contentSections = [];
-
-    // Check for medication list
-    String medicationList = '';
-    bool hasMedicationList = false;
-
-    // Look for medication list patterns
-    for (int i = 0; i < paragraphs.length; i++) {
-      String paragraph = paragraphs[i].trim();
-
-      // Check if this paragraph contains a medication list
-      if (paragraph.contains('لیست داروها:') ||
-          paragraph.contains('داروهای نسخه:') ||
-          paragraph.contains('داروهای تجویز شده:') ||
-          paragraph.startsWith('لیست داروها') ||
-          paragraph.startsWith('داروهای نسخه') ||
-          paragraph.startsWith('داروهای تجویز شده')) {
-        medicationList = paragraph;
-        hasMedicationList = true;
-        AppLogger.d(
-            'Found medication list: ${paragraph.substring(0, min(50, paragraph.length))}...');
-        // Remove this paragraph from the list so we don't process it twice
-        paragraphs.removeAt(i);
-        i--;
-        continue;
+    // Remove the initial greeting message that starts with "با کمال میل"
+    if (content.startsWith('با کمال میل') || content.startsWith('با کمال')) {
+      final firstNewlineIndex = content.indexOf('\n\n');
+      if (firstNewlineIndex > 0) {
+        content = content.substring(firstNewlineIndex).trim();
       }
     }
 
-    // Try to identify logical sections in the content
-    for (int i = 0; i < paragraphs.length; i++) {
-      String paragraph = paragraphs[i].trim();
-      String title = '';
-
-      // Try to extract a title if possible
-      if (paragraph.contains(':')) {
-        final parts = paragraph.split(':');
-        if (parts.length > 1 && parts[0].length < 40) {
-          title = parts[0].trim();
-          paragraph = parts.sublist(1).join(':').trim();
-        }
-      } else if (paragraph.startsWith('• ') ||
-          paragraph.startsWith('- ') ||
-          paragraph.startsWith('* ') ||
-          paragraph.startsWith('✧ ')) {
-        title = 'نکات مهم';
-      } else if (i == 0) {
-        title = 'خلاصه';
-      } else if (i == paragraphs.length - 1) {
-        title = 'نتیجه گیری';
-      } else {
-        // Use first few words as title
-        final words = paragraph.split(' ');
-        title = words.length > 3 ? words.take(3).join(' ') + '...' : paragraph;
-      }
-
-      contentSections.add({
-        'title': title,
-        'content': paragraph,
-      });
-    }
-
-    // Add medication list as a separate section if found
-    if (hasMedicationList) {
-      // Try to extract just the list part if there's a title
-      String listContent = medicationList;
-      String listTitle = 'لیست داروها';
-
-      if (medicationList.contains(':')) {
-        final parts = medicationList.split(':');
-        if (parts.length > 1 && parts[0].length < 40) {
-          listTitle = parts[0].trim();
-          listContent = parts.sublist(1).join(':').trim();
-        }
-      }
-
-      // Add the medication list as the first section
-      contentSections.insert(0, {
-        'title': listTitle,
-        'content': listContent,
-      });
-    }
-
-    // Log the final sections for debugging
-    AppLogger.d('Final sections:');
-    for (final section in contentSections) {
-      AppLogger.d(
-          '- ${section['title']}: ${(section['content'] ?? '').length} chars');
-    }
-
-    // Calculate the maximum width for all panels to be the same width
-    final double panelWidth = MediaQuery.of(context).size.width * 0.85;
-
-    // Create a panel for each section
-    List<Widget> panels = [];
-
-    // Use a different color for each panel
-    for (int i = 0; i < contentSections.length; i++) {
-      final section = contentSections[i];
-      final sectionTitle = section['title'] ?? 'بخش ${i + 1}';
-
-      // Use specific style if available, otherwise use a unique style from the list
-      Map<String, dynamic> style;
-      if (this.specificStyles.containsKey(sectionTitle)) {
-        style = this.specificStyles[sectionTitle]!;
-      } else {
-        // Ensure each panel gets a unique color by using the index
-        style = this.sectionStyles[i % this.sectionStyles.length];
-      }
-
-      // Special style for medication list
-      if (i == 0 && hasMedicationList) {
-        style = {
-          'color': Colors.deepPurple.shade700,
-          'icon': Icons.medication_outlined
-        };
-      }
-
-      panels.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: ExpandablePanel(
-            title: sectionTitle,
-            content: section['content'] ?? '',
-            color: style['color'] as Color,
-            icon: style['icon'] as IconData,
-            initiallyExpanded: i == 0, // Expand first section by default
-            width: panelWidth, // Set the same width for all panels
-          ),
-        ),
-      );
-    }
-
-    // Return a column with all the panels
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: panels,
-    );
-  }
-
-  Widget _buildMessageContent(
-      String content, bool isImage, bool isLoading, bool isThinking,
-      {bool isUser = false}) {
-    if (isLoading) {
-      return Row(
-        children: [
-          const SizedBox(
-            height: 20,
-            width: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            content,
-            style: const TextStyle(color: Colors.white),
-          ),
-        ],
-      );
-    }
-
-    if (isThinking) {
-      return Row(
-        children: [
-          SizedBox(
-            height: 20,
-            width: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-              // Animation that makes it pulse
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.7)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            content,
-            style: const TextStyle(color: Colors.white),
-          ),
-        ],
-      );
-    }
-
-    if (isImage) {
-      // Debug URL in console for troubleshooting
-      print('Attempting to load image from URL: $content');
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.6,
-                maxHeight: MediaQuery.of(context).size.height * 0.3,
-              ),
-              child: content.startsWith('http')
-                  ? CachedNetworkImage(
-                      imageUrl: content,
-                      cacheKey: "${content}_key", // Add a unique cache key
-                      httpHeaders: {
-                        'Accept': '*/*', // Try accepting all content types
-                      },
-                      fadeInDuration: const Duration(milliseconds: 200),
-                      placeholder: (context, url) => SizedBox(
-                        height: 160,
-                        width: 200,
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 8),
-                              Flexible(
-                                child: Text(
-                                  'در حال بارگذاری تصویر...\n$url',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 10,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 3,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) {
-                        // Log error for debugging
-                        print('Error loading image from $url: $error');
-
-                        return GestureDetector(
-                          onTap: () {
-                            // Attempt to redownload the image on tap
-                            CachedNetworkImage.evictFromCache(url);
-                            setState(() {});
-                          },
-                          child: Container(
-                            height: 160,
-                            width: 200,
-                            color: Colors.grey[800],
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.error_outline,
-                                      color: Colors.white, size: 32),
-                                  const SizedBox(height: 8),
-                                  Flexible(
-                                    child: Text(
-                                      'خطا در بارگذاری تصویر\nلمس برای بارگذاری مجدد\n$url',
-                                      style: TextStyle(
-                                          color: Colors.white70, fontSize: 10),
-                                      textAlign: TextAlign.center,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                      fit: BoxFit.contain,
-                    )
-                  : Image.file(
-                      File(content),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        // Log error for debugging
-                        print(
-                            'Error loading local image from $content: $error');
-                        return Container(
-                          height: 160,
-                          width: 200,
-                          color: Colors.grey[800],
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.error_outline,
-                                    color: Colors.white, size: 32),
-                                const SizedBox(height: 8),
-                                Flexible(
-                                  child: Text(
-                                    'خطا در نمایش تصویر\n${error.toString().substring(0, error.toString().length > 40 ? 40 : error.toString().length)}',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 10),
-                                    textAlign: TextAlign.center,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'تصویر نسخه',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white70,
-                ),
-              ),
-              if (content.startsWith('http')) ...[
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () async {
-                    try {
-                      // Try opening the image URL in browser
-                      final Uri url = Uri.parse(content);
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(url,
-                            mode: LaunchMode.externalApplication);
-                      }
-                    } catch (e) {
-                      print('Error launching URL: $e');
-                    }
-                  },
-                  child: const Icon(
-                    Icons.open_in_new,
-                    size: 14,
-                    color: Colors.white54,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      );
-    }
-
-    // For AI responses (not user messages)
-    if (!isUser && !isThinking && !isLoading && !content.startsWith('خطا')) {
-      // First, migrate the message if needed
-      String migratedContent =
-          MessageMigrationService.migrateAIMessage(content);
-
-      // Remove the initial greeting message that starts with "با کمال میل"
-      if (migratedContent.startsWith('با کمال میل') ||
-          migratedContent.startsWith('با کمال')) {
-        final firstNewlineIndex = migratedContent.indexOf('\n\n');
-        if (firstNewlineIndex > 0) {
-          migratedContent = migratedContent.substring(firstNewlineIndex).trim();
-        }
-      }
-
-      // Replace stars with better decorative elements
-      migratedContent = migratedContent.replaceAll('***', '✧✧✧');
-      migratedContent = migratedContent.replaceAll('**', '✧✧');
-      migratedContent = migratedContent.replaceAll('*', '✧');
-
-      // Check if the message is in structured format
-      if (migratedContent.contains('-next-')) {
-        // Split the content into sections based on the -next- delimiter
-        List<String> sections = migratedContent.split('-next-');
-
-        // The first section is typically the introduction or summary
-        String header = sections.isNotEmpty ? sections[0].trim() : '';
-
-        // The second section contains the details
-        String details = sections.length > 1 ? sections[1].trim() : '';
-
-        // If we don't have details, just show the content as plain text
-        if (details.isEmpty) {
-          return Text(
-            migratedContent,
-            style: const TextStyle(
-              color: Colors.white,
-              height: 1.5,
-            ),
-          );
-        }
-
-        // Create expandable panels for the details section
-        List<Widget> panels = [];
-
-        // Try to identify logical sections in the details
-        List<Map<String, String>> contentSections = [];
-
-        // First check for prescription analysis sections
-        if (MessageFormatter.isPrescriptionAnalysis(migratedContent)) {
-          // Look for section titles
-          List<String> sectionTitles = [
-            '۱. تشخیص احتمالی',
-            '۲. تداخلات مهم',
-            '۳. عوارض مهم',
-            '۴. زمان مصرف',
-            '۵. نحوه مصرف',
-            '۶. تعداد مصرف',
-            '۷. مدیریت عارضه',
-          ];
-
-          // Additional patterns for detecting sections without numbers
-          List<String> sectionPatterns = [
-            'تشخیص احتمالی',
-            'تداخلات',
-            'تداخلات مهم',
-            'تداخلات دارویی',
-            'عوارض',
-            'عوارض مهم',
-            'عوارض شایع',
-            'زمان مصرف',
-            'نحوه مصرف',
-            'تعداد مصرف',
-            'مدیریت عارضه',
-          ];
-
-          // Check for medication list
-          String medicationList = '';
-          bool hasMedicationList = false;
-
-          // Look for medication list in the details
-          final paragraphs =
-              details.split('\n\n').where((p) => p.trim().isNotEmpty).toList();
-          for (int i = 0; i < paragraphs.length; i++) {
-            String paragraph = paragraphs[i].trim();
-
-            // Check if this paragraph contains a medication list
-            if (paragraph.contains('لیست داروها:') ||
-                paragraph.contains('داروهای نسخه:') ||
-                paragraph.contains('داروهای تجویز شده:') ||
-                paragraph.startsWith('لیست داروها') ||
-                paragraph.startsWith('داروهای نسخه') ||
-                paragraph.startsWith('داروهای تجویز شده')) {
-              medicationList = paragraph;
-              hasMedicationList = true;
-              AppLogger.d(
-                  'Found medication list in structured format: ${paragraph.substring(0, min(50, paragraph.length))}...');
-              break;
-            }
-          }
-
-          // Split into sections based on the numbered sections
-          String currentSection = 'پاسخ داروخانه';
-          String currentContent = '';
-
-          // For debugging
-          AppLogger.d(
-              'Processing prescription analysis content: ${details.length} chars');
-
-          // Process each line to extract sections
-          for (String line in details.split('\n')) {
-            bool isNewSection = false;
-            String trimmedLine = line.trim();
-
-            // Skip medication list lines if we've already extracted it
-            if (hasMedicationList && medicationList.contains(trimmedLine)) {
-              continue;
-            }
-
-            // First check for numbered section titles
-            for (String title in sectionTitles) {
-              if (trimmedLine.startsWith(title)) {
-                // Save previous section if it has content
-                if (currentContent.isNotEmpty) {
-                  AppLogger.d(
-                      'Found section: $currentSection with ${currentContent.length} chars');
-                  contentSections.add({
-                    'title': currentSection,
-                    'content': currentContent.trim(),
-                  });
-                }
-
-                // Start new section
-                currentSection = trimmedLine;
-                currentContent = '';
-                isNewSection = true;
-                AppLogger.d('Starting new numbered section: $currentSection');
-                break;
-              }
-            }
-
-            // If not a numbered section, check for pattern-based sections
-            if (!isNewSection) {
-              for (String pattern in sectionPatterns) {
-                // Check if line starts with pattern followed by colon or space
-                if (trimmedLine.startsWith('$pattern:') ||
-                    trimmedLine == pattern ||
-                    (trimmedLine.startsWith(pattern) &&
-                        trimmedLine.length > pattern.length &&
-                        (trimmedLine[pattern.length] == ' ' ||
-                            trimmedLine[pattern.length] == ':'))) {
-                  // Save previous section if it has content
-                  if (currentContent.isNotEmpty) {
-                    AppLogger.d(
-                        'Found section: $currentSection with ${currentContent.length} chars');
-                    contentSections.add({
-                      'title': currentSection,
-                      'content': currentContent.trim(),
-                    });
-                  }
-
-                  // Start new section
-                  currentSection = trimmedLine;
-                  currentContent = '';
-                  isNewSection = true;
-                  AppLogger.d('Starting new pattern section: $currentSection');
-                  break;
-                }
-              }
-            }
-
-            // Special case for تداخلات section which might be embedded in another section
-            if (!isNewSection &&
-                currentContent.isNotEmpty &&
-                (trimmedLine.startsWith('تداخلات:') ||
-                    trimmedLine == 'تداخلات' ||
-                    trimmedLine.startsWith('تداخلات دارویی') ||
-                    trimmedLine.startsWith('تداخلات مهم'))) {
-              // Save previous section
-              AppLogger.d(
-                  'Found embedded تداخلات section within: $currentSection');
-              contentSections.add({
-                'title': currentSection,
-                'content': currentContent.trim(),
-              });
-
-              // Start تداخلات section
-              currentSection = trimmedLine;
-              currentContent = '';
-              isNewSection = true;
-            }
-
-            if (!isNewSection) {
-              currentContent += '$line\n';
-            }
-          }
-
-          // Add the final section
-          if (currentContent.isNotEmpty) {
-            AppLogger.d(
-                'Adding final section: $currentSection with ${currentContent.length} chars');
-            contentSections.add({
-              'title': currentSection,
-              'content': currentContent.trim(),
-            });
-          }
-
-          // Check if we have a تداخلات section, if not try to extract it from other sections
-          bool hasInteractionsSection = contentSections.any((section) =>
-              section['title']!.contains('تداخلات') ||
-              section['title']!.contains('۲. تداخلات'));
-
-          if (!hasInteractionsSection) {
-            AppLogger.d('No تداخلات section found, searching in content');
-
-            // Look for تداخلات in the content of other sections
-            for (int i = 0; i < contentSections.length; i++) {
-              String sectionContent = contentSections[i]['content'] ?? '';
-
-              // Look for تداخلات paragraph in the content
-              int interactionsIndex = sectionContent.indexOf('تداخلات:');
-              if (interactionsIndex == -1) {
-                interactionsIndex = sectionContent.indexOf('تداخلات ');
-              }
-
-              if (interactionsIndex >= 0) {
-                AppLogger.d(
-                    'Found تداخلات in section: ${contentSections[i]['title']}');
-
-                // Extract the interactions part
-                String beforeInteractions =
-                    sectionContent.substring(0, interactionsIndex).trim();
-                String interactionsPart =
-                    sectionContent.substring(interactionsIndex).trim();
-
-                // Update the original section with content before interactions
-                contentSections[i]['content'] = beforeInteractions;
-
-                // Add a new section for interactions
-                contentSections.add({
-                  'title': 'تداخلات',
-                  'content': interactionsPart,
-                });
-
-                AppLogger.d('Split تداخلات into separate section');
-                break;
-              }
-            }
-          }
-
-          // Add medication list as a separate section if found
-          if (hasMedicationList) {
-            // Try to extract just the list part if there's a title
-            String listContent = medicationList;
-            String listTitle = 'لیست داروها';
-
-            if (medicationList.contains(':')) {
-              final parts = medicationList.split(':');
-              if (parts.length > 1 && parts[0].length < 40) {
-                listTitle = parts[0].trim();
-                listContent = parts.sublist(1).join(':').trim();
-              }
-            }
-
-            // Add the medication list as the first section
-            contentSections.insert(0, {
-              'title': listTitle,
-              'content': listContent,
-            });
-          }
-        } else {
-          // For general AI responses, split by paragraphs
-          final paragraphs =
-              details.split('\n\n').where((p) => p.trim().isNotEmpty).toList();
-
-          // Check for medication list
-          String medicationList = '';
-          bool hasMedicationList = false;
-
-          // Look for medication list in the paragraphs
-          for (int i = 0; i < paragraphs.length; i++) {
-            String paragraph = paragraphs[i].trim();
-
-            // Check if this paragraph contains a medication list
-            if (paragraph.contains('لیست داروها:') ||
-                paragraph.contains('داروهای نسخه:') ||
-                paragraph.contains('داروهای تجویز شده:') ||
-                paragraph.startsWith('لیست داروها') ||
-                paragraph.startsWith('داروهای نسخه') ||
-                paragraph.startsWith('داروهای تجویز شده')) {
-              medicationList = paragraph;
-              hasMedicationList = true;
-              AppLogger.d(
-                  'Found medication list in general format: ${paragraph.substring(0, min(50, paragraph.length))}...');
-              // Remove this paragraph from the list so we don't process it twice
-              paragraphs.removeAt(i);
-              i--;
-              continue;
-            }
-          }
-
-          // Process each paragraph
-          for (int i = 0; i < paragraphs.length; i++) {
-            String paragraph = paragraphs[i].trim();
-            String title = '';
-
-            // Try to extract a title if possible
-            if (paragraph.contains(':')) {
-              final parts = paragraph.split(':');
-              if (parts.length > 1 && parts[0].length < 40) {
-                title = parts[0].trim();
-                paragraph = parts.sublist(1).join(':').trim();
-              }
-            } else if (paragraph.startsWith('• ') ||
-                paragraph.startsWith('- ') ||
-                paragraph.startsWith('* ') ||
-                paragraph.startsWith('✧ ')) {
-              title = 'نکات مهم';
-            } else if (i == paragraphs.length - 1) {
-              title = 'نتیجه گیری';
-            } else {
-              // Use first few words as title
-              final words = paragraph.split(' ');
-              title = words.length > 3
-                  ? words.take(3).join(' ') + '...'
-                  : paragraph;
-            }
-
-            contentSections.add({
-              'title': title,
-              'content': paragraph,
-            });
-          }
-
-          // Add medication list as a separate section if found
-          if (hasMedicationList) {
-            // Try to extract just the list part if there's a title
-            String listContent = medicationList;
-            String listTitle = 'لیست داروها';
-
-            if (medicationList.contains(':')) {
-              final parts = medicationList.split(':');
-              if (parts.length > 1 && parts[0].length < 40) {
-                listTitle = parts[0].trim();
-                listContent = parts.sublist(1).join(':').trim();
-              }
-            }
-
-            // Add the medication list as the first section
-            contentSections.insert(0, {
-              'title': listTitle,
-              'content': listContent,
-            });
-          }
-        }
-
-        // Log the final sections for debugging
-        AppLogger.d('Final sections:');
-        for (final section in contentSections) {
-          AppLogger.d(
-              '- ${section['title']}: ${(section['content'] ?? '').length} chars');
-        }
-
-        // Calculate the maximum width for all panels to be the same width
-        final double panelWidth = MediaQuery.of(context).size.width * 0.85;
-
-        // Create a panel for each section with a unique color
-        for (int i = 0; i < contentSections.length; i++) {
-          final section = contentSections[i];
-          final sectionTitle = section['title'] ?? 'بخش ${i + 1}';
-
-          // Use specific style if available, otherwise use a unique style from the list
-          Map<String, dynamic> style;
-          if (this.specificStyles.containsKey(sectionTitle)) {
-            style = this.specificStyles[sectionTitle]!;
-          } else {
-            // Ensure each panel gets a unique color by using the index
-            style = this.sectionStyles[i % this.sectionStyles.length];
-          }
-
-          // Special style for medication list
-          if (i == 0 &&
-              (sectionTitle.contains('لیست داروها') ||
-                  sectionTitle.contains('داروهای نسخه') ||
-                  sectionTitle.contains('داروهای تجویز شده'))) {
-            style = {
-              'color': Colors.deepPurple.shade700,
-              'icon': Icons.medication_outlined
-            };
-          }
-
-          panels.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: ExpandablePanel(
-                title: sectionTitle,
-                content: section['content'] ?? '',
-                color: style['color'] as Color,
-                icon: style['icon'] as IconData,
-                initiallyExpanded: i == 0, // Expand first section by default
-                width: panelWidth, // Set the same width for all panels
-              ),
-            ),
-          );
-        }
-
-        // Return a column with the header text and all the panels
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header text (skip if it's the greeting message)
-            if (header.isNotEmpty &&
-                !header.startsWith('با کمال میل') &&
-                !header.startsWith('با کمال'))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: Text(
-                  header,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-
-            // Expandable panels for each section
-            ...panels,
-          ],
-        );
-      } else {
-        // If not structured, use the AI response panel builder
-        return _buildAIResponsePanels(migratedContent);
-      }
-    }
-
-    // For user messages, just show the text
-    return Text(
-      content,
-      style: const TextStyle(
-        color: Colors.white,
-        height: 1.5,
-      ),
-    );
+    // For AI messages, use the processTaggedContent function for all content
+    // This will handle both tagged and untagged content
+    return _processTaggedContent(content);
   }
 
   Widget _buildErrorMessageContent(String content) {

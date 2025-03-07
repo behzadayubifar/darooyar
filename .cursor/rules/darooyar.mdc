@@ -1,10 +1,17 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: for writing better flutter code.
 globs: *.dart
 alwaysApply: false
 ---
 
 # Your rule content
+
+- go to the flutter directory first and run the flutter (if needed) on the mobile connected to the ide.
 
 You are a flutter expert who writes efficeint and clean code with riverpod (as a state management solution) and use Navigator2,
 

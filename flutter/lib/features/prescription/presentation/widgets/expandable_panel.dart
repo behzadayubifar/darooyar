@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive_size.dart';
 
@@ -242,78 +243,100 @@ class _ExpandablePanelState extends State<ExpandablePanel>
       builder: _buildChildren,
       child: closed
           ? null
-          : Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(16.0),
-                  bottomRight: Radius.circular(16.0),
-                ),
-                border: Border.all(
-                  color: widget.color.withOpacity(0.2),
-                ),
-              ),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                    ResponsiveSize.size(16),
-                    ResponsiveSize.size(16),
-                    ResponsiveSize.size(16),
-                    ResponsiveSize.size(8)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SelectableText(
-                      widget.content,
-                      style: TextStyle(
-                        fontSize: ResponsiveSize.fontSize(15),
-                        height: 1.5,
-                        color: AppTheme.textPrimaryColor,
-                      ),
-                      textAlign: TextAlign.justify,
-                      selectionControls: MaterialTextSelectionControls(),
-                      contextMenuBuilder: (context, editableTextState) {
-                        return AdaptiveTextSelectionToolbar.editableText(
-                          editableTextState: editableTextState,
-                        );
-                      },
-                      textScaleFactor: 1.0,
-                      maxLines: null,
-                      textDirection: TextDirection.rtl,
-                      showCursor: true,
-                      enableInteractiveSelection: true,
+          : NotificationListener<ScrollNotification>(
+              // Allow scroll notifications to propagate to parent
+              onNotification: (ScrollNotification notification) {
+                // Return false to allow the notification to continue to be dispatched to further ancestors
+                return false;
+              },
+              child: Listener(
+                // Handle mouse wheel events
+                onPointerSignal: (PointerSignalEvent event) {
+                  // Do nothing, allowing the event to propagate to parent
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(16.0),
+                      bottomRight: Radius.circular(16.0),
                     ),
-                    Container(
-                      alignment: Alignment.centerRight,
-                      margin: EdgeInsets.only(top: ResponsiveSize.vertical(4)),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: ResponsiveSize.width(50),
-                        ),
-                        child: TextButton.icon(
-                          onPressed: _handleTap,
-                          icon: Icon(Icons.keyboard_arrow_up,
-                              size: ResponsiveSize.size(16)),
-                          label: Text(
-                            'بستن',
+                    border: Border.all(
+                      color: widget.color.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        ResponsiveSize.size(16),
+                        ResponsiveSize.size(16),
+                        ResponsiveSize.size(16),
+                        ResponsiveSize.size(8)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Listener(
+                          // Handle mouse wheel events explicitly for the text
+                          onPointerSignal: (PointerSignalEvent event) {
+                            // Do nothing, allowing the event to propagate to parent
+                          },
+                          // Make sure drag gestures don't get captured for text selection
+                          behavior: HitTestBehavior.translucent,
+                          child: SelectableText(
+                            widget.content,
                             style: TextStyle(
-                              fontSize: ResponsiveSize.fontSize(12),
-                              color: widget.color,
+                              fontSize: ResponsiveSize.fontSize(15),
+                              height: 1.5,
+                              color: AppTheme.textPrimaryColor,
                             ),
+                            textAlign: TextAlign.justify,
+                            selectionControls: MaterialTextSelectionControls(),
+                            contextMenuBuilder: (context, editableTextState) {
+                              return AdaptiveTextSelectionToolbar.editableText(
+                                editableTextState: editableTextState,
+                              );
+                            },
+                            textScaleFactor: 1.0,
+                            maxLines: null,
+                            textDirection: TextDirection.rtl,
+                            showCursor: true,
+                            enableInteractiveSelection: true,
                           ),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: ResponsiveSize.horizontal(3),
-                              vertical: ResponsiveSize.vertical(0.5),
+                        ),
+                        Container(
+                          alignment: Alignment.centerRight,
+                          margin:
+                              EdgeInsets.only(top: ResponsiveSize.vertical(4)),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: ResponsiveSize.width(50),
                             ),
-                            backgroundColor: widget.color.withOpacity(0.1),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: ResponsiveSize.borderRadius(8),
+                            child: TextButton.icon(
+                              onPressed: _handleTap,
+                              icon: Icon(Icons.keyboard_arrow_up,
+                                  size: ResponsiveSize.size(16)),
+                              label: Text(
+                                'بستن',
+                                style: TextStyle(
+                                  fontSize: ResponsiveSize.fontSize(12),
+                                  color: widget.color,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: ResponsiveSize.horizontal(3),
+                                  vertical: ResponsiveSize.vertical(0.5),
+                                ),
+                                backgroundColor: widget.color.withOpacity(0.1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: ResponsiveSize.borderRadius(8),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

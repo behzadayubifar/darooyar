@@ -4,7 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
+  image_clipboard
   isar_flutter_libs
+  pasteboard
   url_launcher_linux
 )
 

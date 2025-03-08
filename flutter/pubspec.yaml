@@ -67,6 +67,7 @@ dependencies:
   flutter_staggered_animations: ^1.1.1
   url_launcher: ^6.2.5
   share_plus: ^7.2.1
+  image_clipboard: ^1.1.0+1
 
 dev_dependencies:
   flutter_test:

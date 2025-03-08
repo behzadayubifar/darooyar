@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/message_formatter.dart';
@@ -40,15 +41,37 @@ class StructuredMedicationInfo extends StatelessWidget {
         mightBeTruncated) {
       AppLogger.d(
           'Displaying content as plain text. Structured format: ${MessageFormatter.isStructuredFormat(formattedContent)}');
-      return SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: SelectableText(
-          content,
-          style: const TextStyle(
-            fontSize: 16,
-            color: AppTheme.textPrimaryColor,
+      return NotificationListener<ScrollNotification>(
+        // Allow scroll notifications to propagate to parent
+        onNotification: (ScrollNotification notification) {
+          // Return false to allow the notification to continue to be dispatched to further ancestors
+          return false;
+        },
+        child: Listener(
+          // Handle mouse wheel events
+          onPointerSignal: (PointerSignalEvent event) {
+            // Do nothing, allowing the event to propagate to parent
+          },
+          child: SingleChildScrollView(
+            physics:
+                const NeverScrollableScrollPhysics(), // Prevent local scrolling
+            child: Listener(
+              // Handle mouse wheel events explicitly for the text
+              onPointerSignal: (PointerSignalEvent event) {
+                // Do nothing, allowing the event to propagate to parent
+              },
+              // Make sure drag gestures don't get captured for text selection
+              behavior: HitTestBehavior.translucent,
+              child: SelectableText(
+                content,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.textPrimaryColor,
+                ),
+                textDirection: TextDirection.rtl,
+              ),
+            ),
           ),
-          textDirection: TextDirection.rtl,
         ),
       );
     }
@@ -58,15 +81,37 @@ class StructuredMedicationInfo extends StatelessWidget {
     if (parts.length != 2) {
       AppLogger.d(
           'Content split into ${parts.length} parts instead of expected 2');
-      return SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: SelectableText(
-          content,
-          style: const TextStyle(
-            fontSize: 16,
-            color: AppTheme.textPrimaryColor,
+      return NotificationListener<ScrollNotification>(
+        // Allow scroll notifications to propagate to parent
+        onNotification: (ScrollNotification notification) {
+          // Return false to allow the notification to continue to be dispatched to further ancestors
+          return false;
+        },
+        child: Listener(
+          // Handle mouse wheel events
+          onPointerSignal: (PointerSignalEvent event) {
+            // Do nothing, allowing the event to propagate to parent
+          },
+          child: SingleChildScrollView(
+            physics:
+                const NeverScrollableScrollPhysics(), // Prevent local scrolling
+            child: Listener(
+              // Handle mouse wheel events explicitly for the text
+              onPointerSignal: (PointerSignalEvent event) {
+                // Do nothing, allowing the event to propagate to parent
+              },
+              // Make sure drag gestures don't get captured for text selection
+              behavior: HitTestBehavior.translucent,
+              child: SelectableText(
+                content,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.textPrimaryColor,
+                ),
+                textDirection: TextDirection.rtl,
+              ),
+            ),
           ),
-          textDirection: TextDirection.rtl,
         ),
       );
     }
@@ -309,19 +354,33 @@ class StructuredMedicationInfo extends StatelessWidget {
     }
 
     // Build the expandable panels
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: orderedSections.map((section) {
-          return ExpandablePanel(
-            title: section['title'] as String,
-            content: section['content'] as String,
-            color: section['color'] as Color,
-            icon: section['icon'] as IconData,
-            initiallyExpanded: section['initiallyExpanded'] as bool,
-          );
-        }).toList(),
+    return NotificationListener<ScrollNotification>(
+      // Allow scroll notifications to propagate to parent
+      onNotification: (ScrollNotification notification) {
+        // Return false to allow the notification to continue to be dispatched to further ancestors
+        return false;
+      },
+      child: Listener(
+        // Handle mouse wheel events
+        onPointerSignal: (PointerSignalEvent event) {
+          // Do nothing, allowing the event to propagate to parent
+        },
+        child: SingleChildScrollView(
+          physics:
+              const NeverScrollableScrollPhysics(), // Prevent local scrolling
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: orderedSections.map((section) {
+              return ExpandablePanel(
+                title: section['title'] as String,
+                content: section['content'] as String,
+                color: section['color'] as Color,
+                icon: section['icon'] as IconData,
+                initiallyExpanded: section['initiallyExpanded'] as bool,
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }

@@ -4,7 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
+  image_clipboard
   isar_flutter_libs
+  pasteboard
   share_plus
   url_launcher_windows
 )

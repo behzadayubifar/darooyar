@@ -28,6 +28,16 @@ class AuthService {
     }
   }
 
+  Future<bool> hasValidToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(hasValidTokenKey) ?? false;
+    } catch (e) {
+      AppLogger.e('Error checking token validity: $e');
+      return false;
+    }
+  }
+
   Future<void> saveToken(String token) async {
     try {
       // Using secure storage for better persistence and security
@@ -78,23 +88,27 @@ class AuthService {
       AppLogger.i('Attempting login for email: $email');
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8'
+        },
+        body: utf8.encode(jsonEncode({
           'email': email,
           'password': password,
-        }),
+        })),
       );
 
       AppLogger.network(
         'POST',
         '$baseUrl/auth/login',
         response.statusCode,
-        body: response.body,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
       );
 
       if (response.statusCode == 200) {
         try {
-          final data = jsonDecode(response.body);
+          final data =
+              jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
           await saveToken(data['token']);
           AppLogger.i('Login successful for user: ${data['user']['email']}');
           return User.fromJson(data['user']);
@@ -105,7 +119,8 @@ class AuthService {
       } else {
         String errorMessage;
         try {
-          final error = jsonDecode(response.body);
+          final error =
+              jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
           errorMessage = error['message'] ?? 'Invalid credentials';
         } catch (e) {
           AppLogger.e('Error parsing error response: $e');
@@ -138,26 +153,30 @@ class AuthService {
       AppLogger.i('Attempting registration for email: $email');
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8'
+        },
+        body: utf8.encode(jsonEncode({
           'username': username,
           'email': email,
           'password': password,
           'first_name': firstName,
           'last_name': lastName,
-        }),
+        })),
       );
 
       AppLogger.network(
         'POST',
         '$baseUrl/auth/register',
         response.statusCode,
-        body: response.body,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
       );
 
       final Map<String, dynamic> responseData;
       try {
-        responseData = jsonDecode(response.body);
+        responseData =
+            jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
       } catch (e) {
         AppLogger.e('Error parsing response: $e');
         throw Exception('Server returned an invalid response');
@@ -231,18 +250,22 @@ class AuthService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/auth/me'),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json; charset=utf-8'
+        },
       );
 
       AppLogger.network(
         'GET',
         '$baseUrl/auth/me',
         response.statusCode,
-        body: response.body,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
       );
 
       if (response.statusCode == 200) {
-        final userData = json.decode(response.body);
+        final userData =
+            json.decode(utf8.decode(response.bodyBytes, allowMalformed: true));
         AppLogger.i('Successfully retrieved user data from server');
 
         // Save the token again to ensure we have the latest user data
@@ -261,7 +284,8 @@ class AuthService {
       } else {
         String errorMessage;
         try {
-          final error = json.decode(response.body);
+          final error = json
+              .decode(utf8.decode(response.bodyBytes, allowMalformed: true));
           errorMessage = error['message'] ?? 'Failed to get user data';
         } catch (e) {
           errorMessage = 'Unknown error: ${response.statusCode}';
@@ -298,59 +322,19 @@ class AuthService {
   bool _isTokenExpired(String token) {
     try {
       final Map<String, dynamic> payload = _decodeJwtPayload(token);
-
       if (!payload.containsKey('exp')) {
-        return false; // No expiration claim, assume not expired
+        return false;
       }
 
-      final int expTimestamp = payload['exp'];
-      final DateTime expiration =
-          DateTime.fromMillisecondsSinceEpoch(expTimestamp * 1000);
-      return DateTime.now().isAfter(expiration);
+      final exp = payload['exp'];
+      final expiry = exp is int
+          ? DateTime.fromMillisecondsSinceEpoch(exp * 1000)
+          : DateTime.fromMillisecondsSinceEpoch(
+              int.parse(exp.toString()) * 1000);
+      return expiry.isBefore(DateTime.now());
     } catch (e) {
-      AppLogger.w('Error checking token expiration: $e');
-      return true; // Assume expired if we can't validate
-    }
-  }
-
-  // Check if token is valid without making a network request
-  Future<bool> hasValidToken() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final hasToken = prefs.getBool(hasValidTokenKey) ?? false;
-
-      if (!hasToken) {
-        AppLogger.d('No valid token flag found');
-        return false;
-      }
-
-      final token = await getToken();
-      if (token == null) {
-        AppLogger.d('Token flag exists but no token found');
-        await prefs.setBool(hasValidTokenKey, false);
-        return false;
-      }
-
-      // Basic check for token format - should be a JWT with 3 parts
-      if (!_isValidJwtFormat(token)) {
-        AppLogger.w('Token is not in valid JWT format');
-        await logout();
-        return false;
-      }
-
-      // Check if the token is expired
-      if (_isTokenExpired(token)) {
-        AppLogger.w('Token is expired');
-        await logout();
-        return false;
-      }
-
-      // Even if we can't extract user info, the token might still be valid
-      // Let the server validate it
-      return true;
-    } catch (e) {
-      AppLogger.e('Error checking token validity: $e');
-      return false;
+      AppLogger.w('Error checking token expiry: $e');
+      return true; // Consider expired if we can't determine
     }
   }
 }

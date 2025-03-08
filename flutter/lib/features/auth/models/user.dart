@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class User {
   final String id;
   final String username;
@@ -22,8 +24,23 @@ class User {
     String decodeString(dynamic value) {
       if (value == null) return '';
       try {
-        // Ensure proper handling of UTF-8 strings
+        // Make sure we're handling UTF-8 strings properly
         final str = value.toString();
+
+        // Check if the string seems to be improperly encoded (contains placeholder chars)
+        if (str.contains('Ø') || str.contains('Ù') || str.contains('§')) {
+          // Try to decode from UTF-8 bytes if needed
+          try {
+            // This is a fallback that attempts to re-encode potentially garbled text
+            final bytes = utf8.encode(str);
+            final decodedStr = utf8.decode(bytes, allowMalformed: true);
+            return decodedStr;
+          } catch (_) {
+            // If all decoding attempts fail, return the original string
+            return str;
+          }
+        }
+
         return str;
       } catch (_) {
         return '';

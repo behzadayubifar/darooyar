@@ -4,6 +4,7 @@ class User {
   final String email;
   final String firstName;
   final String lastName;
+  final double credit;
   final DateTime createdAt;
 
   User({
@@ -12,6 +13,7 @@ class User {
     required this.email,
     required this.firstName,
     required this.lastName,
+    required this.credit,
     required this.createdAt,
   });
 
@@ -34,6 +36,9 @@ class User {
       email: decodeString(json['email']),
       firstName: decodeString(json['first_name']),
       lastName: decodeString(json['last_name']),
+      credit: json['credit'] != null
+          ? double.parse(json['credit'].toString())
+          : 0.0,
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -45,6 +50,7 @@ class User {
       'email': email,
       'first_name': firstName,
       'last_name': lastName,
+      'credit': credit,
       'created_at': createdAt.toIso8601String(),
     };
   }

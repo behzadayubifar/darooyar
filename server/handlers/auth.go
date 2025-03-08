@@ -68,6 +68,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			Email:     user.Email,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
+			Credit:    user.Credit,
 			CreatedAt: user.CreatedAt,
 		},
 		Token: token,
@@ -122,6 +123,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			Email:     user.Email,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
+			Credit:    user.Credit,
 			CreatedAt: user.CreatedAt,
 		},
 		Token: token,
@@ -160,6 +162,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		Email:     user.Email,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
+		Credit:    user.Credit,
 		CreatedAt: user.CreatedAt,
 	}
 
@@ -190,6 +193,7 @@ func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
 		"message":   "Token is valid",
 		"user_id":   userID,
 		"username":  user.Username,
+		"credit":    user.Credit,
 		"is_active": true,
 	})
 }

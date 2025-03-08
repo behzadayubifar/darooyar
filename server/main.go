@@ -48,6 +48,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler()
 	chatHandler := handlers.NewChatHandler()
 	folderHandler := handlers.NewFolderHandler()
+	creditHandler := handlers.NewCreditHandler()
 
 	// Define API routes
 
@@ -105,6 +106,12 @@ func main() {
 	protected.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
 	protected.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)
 	protected.HandleFunc("POST /api/ai/analyze-prescription", aiHandler.AnalyzePrescriptionWithAI)
+
+	// Credit routes
+	protected.HandleFunc("GET /api/credit", creditHandler.GetUserCredit)
+	protected.HandleFunc("POST /api/credit/add", creditHandler.AddCredit)
+	protected.HandleFunc("POST /api/credit/subtract", creditHandler.SubtractCredit)
+	protected.HandleFunc("GET /api/credit/user", creditHandler.GetUserCreditByID)
 
 	// Apply auth middleware to protected routes
 	mux.Handle("/api/", middleware.AuthMiddleware(protected))

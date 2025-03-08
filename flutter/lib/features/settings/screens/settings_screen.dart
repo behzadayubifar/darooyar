@@ -485,8 +485,90 @@ class SettingsScreen extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                     textAlign: TextAlign.center,
                   ),
+                  const SizedBox(height: 16),
+                  // Credit display
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.account_balance_wallet,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Directionality(
+                          textDirection: TextDirection.rtl,
+                          child: Text(
+                            'اعتبار: ${user.credit.toStringAsFixed(2)} تومان',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontFamily: 'Vazirmatn',
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Credit Management Section (if needed)
+          Card(
+            child: Column(
+              children: [
+                const ListTile(
+                  leading: Icon(Icons.account_balance_wallet),
+                  title: Text('مدیریت اعتبار'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: const Text('تاریخچه تراکنش‌ها'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // TODO: Navigate to transaction history screen
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('این قابلیت به زودی اضافه خواهد شد')),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.add_card),
+                  title: const Text('افزایش اعتبار'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // TODO: Navigate to add credit screen
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('این قابلیت به زودی اضافه خواهد شد')),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.shopping_cart),
+                  title: const Text('خرید اشتراک'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pushNamed(context, '/subscription');
+                  },
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),

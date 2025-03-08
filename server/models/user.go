@@ -11,6 +11,7 @@ type User struct {
 	Password  string    `json:"-"` // Password will never be sent in JSON responses
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`
+	Credit    float64   `json:"credit"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -34,5 +35,6 @@ type UserResponse struct {
 	Email     string    `json:"email"`
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`
+	Credit    float64   `json:"credit"`
 	CreatedAt time.Time `json:"created_at"`
 }

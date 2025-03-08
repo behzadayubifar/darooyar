@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/message_formatter.dart';
@@ -15,6 +14,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/message_migration_service.dart';
 import 'image_viewer_screen.dart';
 import '../widgets/chat_image_widget.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
+import '../widgets/message_bubble.dart';
+import '../widgets/message_actions.dart';
+import '../utils/message_utils.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -30,6 +34,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
   bool _showPrescriptionOptions = false;
+  bool _initialScrollDone = false; // متغیر برای کنترل اسکرول اولیه
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -242,6 +247,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    // اسکرول تأخیری به پایین صفحه
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ابتدا 1 ثانیه صبر کنید
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted && _scrollController.hasClients) {
+          // سپس به آرامی در طی 2 ثانیه به پایین اسکرول کنید
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(seconds: 2),
+            curve: Curves.easeInOut,
+          );
+          _initialScrollDone = true;
+        }
+      });
+    });
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
@@ -270,6 +295,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             .read(messageListProvider(widget.chat.id).notifier)
             .sendImageMessage(pickedFile.path);
 
+        // اسکرول به پایین پس از ارسال تصویر
         Future.delayed(const Duration(milliseconds: 300), _scrollToBottom);
       }
     } catch (e) {
@@ -918,7 +944,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _scrollToBottom();
+                  // اسکرول به پایین فقط در صورتی انجام شود که پیام جدیدی دریافت شده باشد
+                  if (messages.isNotEmpty &&
+                      messages.last.role == 'assistant' &&
+                      !messages.last.isLoading &&
+                      !messages.last.isThinking) {
+                    _scrollToBottom();
+                  }
                 });
 
                 return RefreshIndicator(
@@ -929,6 +961,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     controller: _scrollController,
                     padding: const EdgeInsets.all(8),
                     itemCount: messages.length,
+                    key: PageStorageKey<String>('chat_list_${widget.chat.id}'),
                     itemBuilder: (context, index) {
                       final message = messages[index];
                       final isUser = message.role == 'user';
@@ -938,120 +971,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       final isError = message.isError;
                       final isThinking = message.isThinking;
 
-                      return Align(
-                        alignment: isUser
-                            ? Alignment.centerRight
-                            : (message.role == 'assistant' &&
-                                    (message.content
-                                            .contains('۱. تشخیص احتمالی') ||
-                                        message.content
-                                            .contains('۲. تداخلات مهم') ||
-                                        message.content
-                                            .contains('۳. عوارض مهم') ||
-                                        MessageFormatter.isPrescriptionAnalysis(
-                                            message.content) ||
-                                        MessageFormatter.isStructuredFormat(
-                                            message.content)))
-                                ? Alignment.center
-                                : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isError
-                                ? Colors.red[700]
-                                : isThinking
-                                    ? Colors.blue[700]
-                                    : isUser
-                                        ? AppTheme.primaryColor
-                                        : const Color.fromARGB(255, 36, 47, 61),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          constraints: BoxConstraints(
-                            maxWidth: isThinking || isError
-                                ? MediaQuery.of(context).size.width * 0.75
-                                : message.role == 'assistant' &&
-                                        (message.content
-                                                .contains('۱. تشخیص احتمالی') ||
-                                            message.content
-                                                .contains('۲. تداخلات مهم') ||
-                                            message.content
-                                                .contains('۳. عوارض مهم') ||
-                                            MessageFormatter
-                                                .isPrescriptionAnalysis(
-                                                    message.content) ||
-                                            MessageFormatter.isStructuredFormat(
-                                                message.content))
-                                    ? MediaQuery.of(context).size.width * 0.85
-                                    : MediaQuery.of(context).size.width * 0.75,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              isError
-                                  ? _buildErrorMessageContent(message.content)
-                                  : _buildMessageContent(message.content,
-                                      isImage, isLoading, isThinking,
-                                      isUser: isUser),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    message.createdAt
-                                        .toLocal()
-                                        .toString()
-                                        .split('.')[0],
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: isUser || isError
-                                          ? Colors.white70
-                                          : Colors.black54,
-                                    ),
-                                  ),
-                                  if (isError) ...[
-                                    const SizedBox(width: 8),
-                                    InkWell(
-                                      onTap: () {
-                                        // Retry sending the failed message
-                                        final originalContent = message.content
-                                            .split('\n')
-                                            .first
-                                            .replaceFirst(
-                                                'خطا در ارسال پیام: ', '');
-                                        if (originalContent.isNotEmpty) {
-                                          ref
-                                              .read(messageListProvider(
-                                                      widget.chat.id)
-                                                  .notifier)
-                                              .sendMessage(originalContent);
-                                        }
-                                      },
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.refresh,
-                                            size: 14,
-                                            color: Colors.white,
-                                          ),
-                                          SizedBox(width: 2),
-                                          Text(
-                                            'تلاش مجدد',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+                      return MessageBubble(
+                        message: message,
+                        isUser: isUser,
+                        isError: isError,
+                        isLoading: isLoading,
+                        isThinking: isThinking,
+                        isImage: isImage,
+                        messageContent: isError
+                            ? _buildErrorMessageContent(message.content)
+                            : _buildMessageContent(
+                                message.content, isImage, isLoading, isThinking,
+                                isUser: isUser),
+                        onRetry: isError
+                            ? () {
+                                // Retry sending the failed message
+                                final originalContent = message.content
+                                    .split('\n')
+                                    .first
+                                    .replaceFirst('خطا در ارسال پیام: ', '');
+                                if (originalContent.isNotEmpty) {
+                                  ref
+                                      .read(messageListProvider(widget.chat.id)
+                                          .notifier)
+                                      .sendMessage(originalContent);
+                                }
+                              }
+                            : null,
                       );
                     },
                   ),
@@ -1134,16 +1080,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         vertical: 8,
                       ),
                     ),
-                    textInputAction: TextInputAction.send,
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    maxLines: 5,
+                    minLines: 1,
                     onSubmitted: (_) {
-                      if (_messageController.text.isNotEmpty) {
-                        ref
-                            .read(messageListProvider(widget.chat.id).notifier)
-                            .sendMessage(_messageController.text);
-                        _messageController.clear();
-                        Future.delayed(
-                            const Duration(milliseconds: 100), _scrollToBottom);
-                      }
+                      // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
                     },
                   ),
                 ),
@@ -1155,8 +1097,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           .read(messageListProvider(widget.chat.id).notifier)
                           .sendMessage(_messageController.text);
                       _messageController.clear();
+                      // اسکرول به پایین پس از ارسال پیام
                       Future.delayed(
-                          const Duration(milliseconds: 100), _scrollToBottom);
+                          const Duration(milliseconds: 300), _scrollToBottom);
                     }
                   },
                   mini: true,

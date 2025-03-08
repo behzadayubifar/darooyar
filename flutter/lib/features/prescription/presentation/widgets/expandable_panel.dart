@@ -30,6 +30,7 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   late Animation<double> _iconTurns;
   late Animation<double> _heightFactor;
   bool _isExpanded = false;
+  final GlobalKey _panelKey = GlobalKey();
 
   @override
   void initState() {
@@ -41,7 +42,11 @@ class _ExpandablePanelState extends State<ExpandablePanel>
     _heightFactor = _controller.drive(CurveTween(curve: Curves.easeIn));
     _iconTurns = _controller.drive(Tween<double>(begin: 0.0, end: 0.5)
         .chain(CurveTween(curve: Curves.easeIn)));
-    _isExpanded = widget.initiallyExpanded;
+
+    final savedState =
+        PageStorage.of(context).readState(context, identifier: widget.title);
+    _isExpanded = savedState ?? widget.initiallyExpanded;
+
     if (_isExpanded) _controller.value = 1.0;
   }
 
@@ -59,7 +64,8 @@ class _ExpandablePanelState extends State<ExpandablePanel>
       } else {
         _controller.reverse();
       }
-      PageStorage.of(context).writeState(context, _isExpanded);
+      PageStorage.of(context)
+          .writeState(context, _isExpanded, identifier: widget.title);
     });
   }
 

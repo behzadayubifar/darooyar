@@ -4,6 +4,7 @@ import '../models/chat.dart';
 import '../services/chat_service.dart';
 import '../../../core/utils/logger.dart';
 import 'folder_providers.dart';
+import '../../subscription/providers/subscription_provider.dart';
 
 final chatServiceProvider = Provider<ChatService>((ref) {
   return ChatService();
@@ -60,16 +61,32 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<Chat>>> {
 
   Future<void> createChat(String title) async {
     try {
+      // Check if user has an active subscription plan
+      final currentPlan = await _ref.read(currentPlanProvider.future);
+      if (currentPlan == null) {
+        throw Exception('برای ایجاد گفتگوی جدید نیاز به اشتراک فعال دارید');
+      }
+
+      // Set loading state
+      state = const AsyncValue.loading();
+
       final newChat = await _chatService.createChat(title);
       if (newChat != null) {
-        state.whenData((chats) {
-          state = AsyncValue.data([newChat, ...chats]);
-        });
+        // Get current chats
+        final currentChats = state.valueOrNull ?? [];
+
+        // Update state with new chat at the beginning
+        state = AsyncValue.data([newChat, ...currentChats]);
+
+        AppLogger.i('Successfully created new chat: ${newChat.id}');
       } else {
         AppLogger.e('Failed to create chat: returned null');
+        throw Exception('خطا در ایجاد گفتگو. لطفا دوباره تلاش کنید.');
       }
     } catch (e) {
+      AppLogger.e('Error creating chat: $e');
       state = AsyncValue.error(e, StackTrace.current);
+      rethrow; // Rethrow to allow handling in UI
     }
   }
 

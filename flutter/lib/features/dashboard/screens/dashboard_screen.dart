@@ -9,6 +9,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../chat/models/chat.dart';
 import '../../chat/screens/chat_list_screen.dart';
 import '../../chat/screens/chat_screen.dart';
+import '../../chat/providers/chat_providers.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../subscription/models/plan.dart';
 import '../../subscription/models/subscription_plan.dart';
@@ -213,23 +214,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             });
           } else if (index == 2) {
             // Start new chat
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatScreen(
-                    chat: Chat(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  title: 'گفتگوی جدید',
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                  messages: [],
-                  folderId: null,
-                )),
-              ),
-            ).then((_) {
-              setState(() {
-                _currentIndex = 0;
-              });
+            _showNewChatDialog(context);
+            setState(() {
+              _currentIndex = 0;
             });
           }
         },
@@ -705,20 +692,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 label: 'گفتگوی جدید',
                 color: Colors.blue,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                          chat: Chat(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: 'گفتگوی جدید',
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                        messages: [],
-                        folderId: null,
-                      )),
-                    ),
-                  );
+                  _showNewChatDialog(context);
                 },
               ),
               _buildActionButton(
@@ -1189,5 +1163,93 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     } else {
       return 'هزار تومن';
     }
+  }
+
+  // Show dialog to create a new chat
+  void _showNewChatDialog(BuildContext context) async {
+    // Check if user has an active plan
+    final currentPlan = await ref.read(currentPlanProvider.future);
+    if (currentPlan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('برای ایجاد گفتگوی جدید نیاز به اشتراک فعال دارید'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+
+      // Navigate to subscription screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const SubscriptionScreen(),
+        ),
+      );
+      return;
+    }
+
+    // Show dialog to enter chat name
+    final TextEditingController chatNameController =
+        TextEditingController(text: 'گفتگوی جدید');
+
+    // Pre-select the default text
+    chatNameController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: chatNameController.text.length,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ایجاد گفتگوی جدید'),
+        content: TextField(
+          controller: chatNameController,
+          decoration: const InputDecoration(
+            labelText: 'نام گفتگو',
+            hintText: 'نام گفتگوی جدید را وارد کنید',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('انصراف'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final chatName = chatNameController.text.trim();
+              if (chatName.isEmpty) {
+                return;
+              }
+
+              Navigator.pop(context);
+
+              // Create and navigate to new chat
+              final chatService = ref.read(chatServiceProvider);
+              try {
+                final newChat = await chatService.createChat(chatName);
+                if (newChat != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(chat: newChat),
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('خطا در ایجاد گفتگو: $e'),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+            child: const Text('ایجاد'),
+          ),
+        ],
+      ),
+    );
   }
 }

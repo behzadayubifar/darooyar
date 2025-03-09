@@ -134,14 +134,19 @@ class MockChatService {
     await Future.delayed(
         const Duration(milliseconds: 800)); // Simulate network delay
 
+    // Generate a unique ID based on current timestamp
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final chatId = timestamp.toString();
+
     final chat = Chat(
-      id: _nextChatId.toString(),
+      id: chatId,
       title: title,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       messages: [],
     );
 
+    // Store using the numeric ID for internal tracking
     _chats[_nextChatId] = chat;
     _messages[_nextChatId] = [];
     _nextChatId++;

@@ -5,18 +5,21 @@ import 'chat_providers.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/services/message_migration_service.dart';
 import '../../../core/utils/message_formatter.dart';
+import '../../subscription/providers/subscription_provider.dart';
 import 'dart:io';
 
 final messageListProvider = StateNotifierProvider.family<MessageListNotifier,
     AsyncValue<List<Message>>, String>(
-  (ref, chatId) => MessageListNotifier(ref.read(chatServiceProvider), chatId),
+  (ref, chatId) =>
+      MessageListNotifier(ref.read(chatServiceProvider), chatId, ref),
 );
 
 class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
   final ChatService _chatService;
   final String _chatId;
+  final Ref _ref;
 
-  MessageListNotifier(this._chatService, this._chatId)
+  MessageListNotifier(this._chatService, this._chatId, this._ref)
       : super(const AsyncValue.loading()) {
     AppLogger.i('Initializing MessageListNotifier for chat: $_chatId');
     loadMessages();
@@ -39,6 +42,12 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
       {String contentType = 'text'}) async {
     try {
       AppLogger.i('Sending message to chat $_chatId: $content');
+
+      // Check if user has an active subscription plan
+      final currentPlan = await _ref.read(currentPlanProvider.future);
+      if (currentPlan == null) {
+        throw Exception('برای ارسال پیام جدید نیاز به اشتراک فعال دارید');
+      }
 
       // Add optimistic message for better UX
       final tempId = DateTime.now().millisecondsSinceEpoch.toString();

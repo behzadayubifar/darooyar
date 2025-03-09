@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/logger.dart';
 import '../providers/chat_providers.dart';
 import '../providers/folder_providers.dart';
+import '../models/chat.dart';
 import 'chat_screen.dart';
 import 'folder_list_screen.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -335,9 +337,14 @@ class _ChatListScreenWithRefreshState
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          // Add a debug log to verify the button is being clicked
+          AppLogger.i('New chat button clicked');
+
+          // Show dialog to create a new chat
           showDialog(
             context: context,
-            builder: (context) {
+            barrierDismissible: false, // Prevent dismissing by tapping outside
+            builder: (BuildContext dialogContext) {
               final titleController = TextEditingController();
               return AlertDialog(
                 title: const Text('گفتگوی جدید'),
@@ -347,19 +354,25 @@ class _ChatListScreenWithRefreshState
                     labelText: 'عنوان گفتگو',
                     border: OutlineInputBorder(),
                   ),
+                  autofocus: true, // Automatically focus the text field
+                  onSubmitted: (value) {
+                    // Handle Enter key press
+                    if (value.isNotEmpty) {
+                      Navigator.pop(dialogContext);
+                      _createNewChat(context, ref, value);
+                    }
+                  },
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('انصراف'),
                   ),
                   TextButton(
                     onPressed: () {
                       if (titleController.text.isNotEmpty) {
-                        ref
-                            .read(chatListProvider.notifier)
-                            .createChat(titleController.text);
-                        Navigator.pop(context);
+                        Navigator.pop(dialogContext);
+                        _createNewChat(context, ref, titleController.text);
                       }
                     },
                     child: const Text('ایجاد'),
@@ -369,9 +382,65 @@ class _ChatListScreenWithRefreshState
             },
           );
         },
+        tooltip: 'گفتگوی جدید',
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  // Helper method to create a new chat
+  Future<void> _createNewChat(
+      BuildContext context, WidgetRef ref, String title) async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('در حال ایجاد گفتگو...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      // Create the chat and wait for it to complete
+      await ref.read(chatListProvider.notifier).createChat(title);
+
+      // Get the newly created chat
+      final chats = ref.read(chatListProvider).value;
+      if (chats != null && chats.isNotEmpty) {
+        // Find the most recently created chat (should be the first one)
+        final newChat = chats.first;
+
+        // Set as selected chat
+        ref.read(selectedChatProvider.notifier).state = newChat;
+
+        // Navigate to the chat screen
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(chat: newChat),
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      // Show error message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'خرید اشتراک',
+              onPressed: () {
+                // Navigate to subscription screen
+                Navigator.pushNamed(context, '/subscription');
+              },
+            ),
+          ),
+        );
+      }
+    }
   }
 
   void _showFolderSelectionDialog(BuildContext context, WidgetRef ref, chat) {

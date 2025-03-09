@@ -10,6 +10,10 @@ import 'mock_chat_service.dart'; // Add import for MockChatService
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'folder_service.dart';
+import '../../subscription/services/subscription_service.dart';
 
 // Add prescription response template
 const String prescriptionPromptTemplate = '''
@@ -188,77 +192,128 @@ class ChatService {
 
     if (token == null) {
       AppLogger.w('No token available, cannot create chat');
-      return null;
+      throw Exception('لطفا ابتدا وارد حساب کاربری خود شوید');
     }
 
+    // Check if user has an active subscription plan
+    final subscriptionService = SubscriptionService();
+    final currentPlan = await subscriptionService.getCurrentPlan(token);
+    if (currentPlan == null) {
+      AppLogger.w('User does not have an active plan, cannot create chat');
+      throw Exception('برای ایجاد گفتگوی جدید نیاز به اشتراک فعال دارید');
+    }
+
+    AppLogger.d(
+        'Using token: ${token.substring(0, min(10, token.length))}... (truncated)');
+    AppLogger.d('Base URL: $baseUrl');
+
     try {
+      AppLogger.d('Sending POST request to ${baseUrl}/chats');
       final response = await _dio.post(
         '/chats',
         data: {'title': title},
         options: Options(
           headers: {
             'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
           },
         ),
       );
 
       AppLogger.d('Create chat response status: ${response.statusCode}');
+      AppLogger.d('Create chat response data: ${response.data}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        AppLogger.d('Create chat response data: ${response.data}');
+        AppLogger.i(
+            'Successfully created chat with status: ${response.statusCode}');
         final chat = Chat.fromJson(response.data);
         AppLogger.i('Successfully created chat: ${chat.id}');
         return chat;
       } else if (response.statusCode == 404) {
-        // Try alternative endpoint format
+        // Try alternative endpoint if the first one returns 404
         AppLogger.w(
             'Chat creation endpoint not found (404). Trying alternative endpoint.');
-        final alternativeResponse = await _dio.post(
-          '/api/chat', // Try alternative endpoint format
-          data: {'title': title},
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
-        );
+        try {
+          AppLogger.d('Sending POST request to ${baseUrl}/api/chat');
+          final alternativeResponse = await _dio.post(
+            '/api/chat', // Try alternative endpoint format
+            data: {'title': title},
+            options: Options(
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+            ),
+          );
 
-        if (alternativeResponse.statusCode == 201 ||
-            alternativeResponse.statusCode == 200) {
-          AppLogger.i('Successfully created chat using alternative endpoint');
-          return Chat.fromJson(alternativeResponse.data);
+          AppLogger.d(
+              'Alternative endpoint response status: ${alternativeResponse.statusCode}');
+          AppLogger.d(
+              'Alternative endpoint response data: ${alternativeResponse.data}');
+
+          if (alternativeResponse.statusCode == 201 ||
+              alternativeResponse.statusCode == 200) {
+            AppLogger.i('Successfully created chat using alternative endpoint');
+            return Chat.fromJson(alternativeResponse.data);
+          }
+
+          AppLogger.w('Unable to create chat. All endpoints returned errors.');
+          throw Exception('خطا در ایجاد گفتگو. لطفا دوباره تلاش کنید.');
+        } catch (e) {
+          AppLogger.e('Error with alternative endpoint: $e');
+          throw Exception('خطا در ایجاد گفتگو. لطفا دوباره تلاش کنید.');
         }
-        AppLogger.w('Unable to create chat. Both endpoints returned 404.');
-        return null;
       } else if (response.statusCode == 401) {
         AppLogger.w(
             'Authentication failed (401) when creating chat. Token may be invalid.');
         await _authService.logout(); // Force logout on auth failure
-        return null;
+        throw Exception('نشست شما منقضی شده است. لطفا دوباره وارد شوید.');
       } else {
         AppLogger.w(
             'Unexpected status code when creating chat: ${response.statusCode}');
-        return null;
+        throw Exception('خطا در ایجاد گفتگو. کد خطا: ${response.statusCode}');
       }
     } catch (e) {
       if (e is DioException) {
         AppLogger.e('Error creating chat: ${e.message}');
+        AppLogger.e('DioException type: ${e.type}');
+
+        if (e.response != null) {
+          AppLogger.e('Error response status: ${e.response?.statusCode}');
+          AppLogger.e('Error response data: ${e.response?.data}');
+        }
 
         if (e.type == DioExceptionType.connectionTimeout ||
-            e.type == DioExceptionType.connectionError ||
-            e.type == DioExceptionType.receiveTimeout) {
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout) {
           AppLogger.w(
               'Connection issue when creating chat. Check internet connection.');
+          throw Exception(
+              'خطا در اتصال به سرور. لطفا اتصال اینترنت خود را بررسی کنید.');
         }
 
-        AppLogger.d('DioException type: ${e.type}');
         if (e.response != null) {
-          AppLogger.d('Error response: ${e.response?.data}');
+          if (e.response?.statusCode == 403) {
+            throw Exception('شما دسترسی لازم برای ایجاد گفتگو را ندارید.');
+          }
         }
+
+        // If it's already an Exception with a message, rethrow it
+        if (e is Exception) {
+          rethrow;
+        }
+
+        throw Exception('خطا در ایجاد گفتگو: ${e.message}');
       } else {
         AppLogger.e('Unexpected error creating chat: $e');
+
+        // If it's already an Exception with a message, rethrow it
+        if (e is Exception) {
+          rethrow;
+        }
+
+        throw Exception('خطا در ایجاد گفتگو. لطفا دوباره تلاش کنید.');
       }
-      return null;
     }
   }
 

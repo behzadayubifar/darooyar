@@ -1093,10 +1093,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 FloatingActionButton(
                   onPressed: () {
                     if (_messageController.text.isNotEmpty) {
+                      final messageText = _messageController.text;
+                      _messageController.clear();
+
                       ref
                           .read(messageListProvider(widget.chat.id).notifier)
-                          .sendMessage(_messageController.text);
-                      _messageController.clear();
+                          .sendMessage(messageText)
+                          .catchError((error) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(error.toString()),
+                            backgroundColor: AppTheme.errorColor,
+                            action: SnackBarAction(
+                              label: 'خرید اشتراک',
+                              onPressed: () {
+                                // Navigate to subscription screen
+                                Navigator.pushNamed(context, '/subscription');
+                              },
+                            ),
+                          ),
+                        );
+                        return null;
+                      });
+
                       // اسکرول به پایین پس از ارسال پیام
                       Future.delayed(
                           const Duration(milliseconds: 300), _scrollToBottom);

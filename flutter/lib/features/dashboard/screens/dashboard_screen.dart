@@ -13,6 +13,7 @@ import '../../settings/screens/settings_screen.dart';
 import '../../subscription/models/plan.dart';
 import '../../subscription/models/subscription_plan.dart';
 import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/providers/subscription_providers.dart';
 import '../../subscription/screens/subscription_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/utils/number_formatter.dart';
@@ -318,11 +319,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                user?.fullName ?? '',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  user?.fullName ?? '',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               TextButton(
@@ -444,68 +448,120 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   Widget _buildPlanUsageCards(SubscriptionPlan plan) {
-    // Simulated usage data - in a real app, this would come from the backend
-    final timeUsed = plan.hasTimeLimit ? 0.3 : 0.0; // 30% of time used
-    final prescriptionsUsed = 0.4; // 40% of prescriptions used
+    // Get active subscriptions to check real usage data
+    final activeSubscriptionsAsync = ref.watch(activeSubscriptionsProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return activeSubscriptionsAsync.when(
+      data: (subscriptions) {
+        // Calculate real usage data from the active subscription
+        // Default values in case we can't get real data
+        double timeUsed = 0.0;
+        double prescriptionsUsed = 0.0;
+        int remainingDays = plan.timeLimitDays;
+        int remainingUses = plan.prescriptionCount;
+
+        // If we have active subscriptions, use the real data
+        if (subscriptions.isNotEmpty) {
+          final subscription =
+              subscriptions.first; // Use the first active subscription
+
+          // Calculate time used if the plan has time limit
+          if (plan.hasTimeLimit && subscription.expiryDate != null) {
+            final now = DateTime.now();
+            final totalDuration = subscription.expiryDate!
+                .difference(subscription.purchaseDate)
+                .inDays;
+            final remainingDuration =
+                subscription.expiryDate!.difference(now).inDays;
+
+            // Make sure we don't divide by zero
+            if (totalDuration > 0) {
+              timeUsed = 1.0 - (remainingDuration / totalDuration);
+              timeUsed =
+                  timeUsed.clamp(0.0, 1.0); // Ensure it's between 0 and 1
+              remainingDays = remainingDuration;
+            }
+          }
+
+          // Calculate prescriptions used
+          if (subscription.remainingUses != null) {
+            remainingUses = subscription.remainingUses!;
+            // Calculate the percentage used
+            if (plan.prescriptionCount > 0) {
+              prescriptionsUsed =
+                  1.0 - (remainingUses / plan.prescriptionCount);
+              prescriptionsUsed = prescriptionsUsed.clamp(
+                  0.0, 1.0); // Ensure it's between 0 and 1
+            }
+          }
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'اشتراک فعال: ${plan.name}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SubscriptionScreen(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'اشتراک فعال: ${plan.name}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                );
-              },
-              child: const Text('تغییر'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SubscriptionScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('تغییر'),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildUsageCard(
+                    title: 'زمان',
+                    icon: Icons.access_time,
+                    color: Colors.blue,
+                    percent: plan.hasTimeLimit ? timeUsed : 0,
+                    value: plan.hasTimeLimit ? '$remainingDays روز' : 'نامحدود',
+                    showProgress: plan.hasTimeLimit,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildUsageCard(
+                    title: 'نسخه‌ها',
+                    icon: Icons.description,
+                    color: Colors.green,
+                    percent: prescriptionsUsed,
+                    value: '$remainingUses از ${plan.prescriptionCount}',
+                    showProgress: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildFeaturesList(plan),
           ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildUsageCard(
-                title: 'زمان باقیمانده',
-                icon: Icons.access_time,
-                color: Colors.blue,
-                percent: plan.hasTimeLimit ? timeUsed : 0,
-                value: plan.hasTimeLimit
-                    ? '${(plan.timeLimitDays * (1 - timeUsed)).toInt()} روز'
-                    : 'نامحدود',
-                showProgress: plan.hasTimeLimit,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildUsageCard(
-                title: 'نسخه‌های باقیمانده',
-                icon: Icons.description,
-                color: Colors.green,
-                percent: prescriptionsUsed,
-                value:
-                    '${(plan.prescriptionCount * (1 - prescriptionsUsed)).toInt()} از ${plan.prescriptionCount}',
-                showProgress: true,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildFeaturesList(plan),
-      ],
+        );
+      },
+      loading: () => const Center(
+        child: CircularProgressIndicator(),
+      ),
+      error: (error, stack) => Center(
+        child: Text('خطا در بارگیری اطلاعات: $error'),
+      ),
     );
   }
 
@@ -528,25 +584,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[700],
+                Flexible(
+                  flex: 3,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, color: color, size: 18),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  flex: 2,
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
             ),
             if (showProgress) ...[
               const SizedBox(height: 12),

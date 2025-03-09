@@ -87,6 +87,13 @@ class SubscriptionService {
   Future<UserSubscription> purchasePlan(String token, String planId) async {
     try {
       AppLogger.i('Purchasing plan with ID: $planId');
+
+      // Convert planId from string to integer
+      final int? planIdInt = int.tryParse(planId);
+      if (planIdInt == null) {
+        throw Exception('Invalid plan ID format');
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/subscriptions/purchase'),
         headers: {
@@ -95,7 +102,7 @@ class SubscriptionService {
           'Authorization': 'Bearer $token',
         },
         body: utf8.encode(jsonEncode({
-          'plan_id': planId,
+          'plan_id': planIdInt, // Send as integer instead of string
         })),
       );
 
@@ -319,12 +326,38 @@ class SubscriptionService {
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
-        final planId = responseData['plan_id'];
+
+        // Extract plan ID from the nested plan object
+        final planId = responseData['plan'] != null
+            ? responseData['plan']['id']?.toString()
+            : null;
+
+        if (planId == null) {
+          AppLogger.w('Plan ID is null in the response');
+          return null;
+        }
 
         // Buscar el plan en nuestra lista de planes predefinidos
         try {
+          // Map server plan IDs to our predefined plan IDs
+          // This is a temporary solution - ideally we should use the same IDs
+          String mappedPlanId;
+          switch (planId) {
+            case "1":
+              mappedPlanId = "cephalexin"; // Basic plan
+              break;
+            case "2":
+              mappedPlanId = "cefuroxime"; // Standard plan
+              break;
+            case "3":
+              mappedPlanId = "cefixime"; // Premium plan
+              break;
+            default:
+              mappedPlanId = "cephalexin"; // Default to basic plan
+          }
+
           return SubscriptionPlan.allPlans
-              .firstWhere((plan) => plan.id == planId);
+              .firstWhere((plan) => plan.id == mappedPlanId);
         } catch (e) {
           AppLogger.w('No matching plan found for ID: $planId');
           return null;

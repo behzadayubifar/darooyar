@@ -6,6 +6,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../models/plan.dart';
 import '../providers/subscription_providers.dart';
 import '../../../core/utils/number_formatter.dart';
+import '../screens/subscription_success_screen.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({Key? key}) : super(key: key);
@@ -68,24 +69,26 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
         throw Exception('لطفا ابتدا وارد شوید');
       }
 
-      await subscriptionService.purchasePlan(token, plan.id);
+      final subscription =
+          await subscriptionService.purchasePlan(token, plan.id);
 
       if (mounted) {
-        setState(() {
-          _showSuccess = true;
-        });
+        // Navigate to success screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SubscriptionSuccessScreen(
+              plan: plan,
+              onContinue: () {
+                // Pop the success screen and the subscription screen
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
 
-        // Show success animation for a few seconds and then return to normal state
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _showSuccess = false;
-            });
-          }
-        });
-
-        // Refresh user data to update credit
-        ref.read(authStateProvider.notifier).refreshUser();
+                // Refresh user data to update credit and subscription info
+                ref.read(authStateProvider.notifier).refreshUser();
+              },
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

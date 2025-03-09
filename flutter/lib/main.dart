@@ -36,7 +36,7 @@ void main() async {
   ]);
   AppLogger.d('Set preferred orientations');
 
-  // Set system UI overlay style
+  // Initial system UI overlay style (will be updated based on theme)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -45,7 +45,7 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  AppLogger.d('Set system UI overlay style');
+  AppLogger.d('Set initial system UI overlay style');
 
   // Create a ProviderContainer to access providers before runApp
   final container = ProviderContainer();
@@ -77,6 +77,29 @@ class MyApp extends ConsumerWidget {
     // Watch both initialization and auth state
     final isInitialized = ref.watch(appInitializationProvider);
     final authState = ref.watch(authStateProvider);
+
+    // Watch theme mode to update system UI overlay style
+    final themeMode = ref.watch(themeModeProvider);
+
+    // Update system UI overlay style based on theme
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final isDarkMode = themeMode == ThemeMode.dark ||
+          (themeMode == ThemeMode.system &&
+              WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+                  Brightness.dark);
+
+      SystemChrome.setSystemUIOverlayStyle(
+        SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor:
+              isDarkMode ? const Color(0xFF121212) : AppTheme.surfaceColor,
+          systemNavigationBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
+        ),
+      );
+    });
 
     // Run API endpoint discovery when authenticated (only in debug mode)
     if (kDebugMode &&

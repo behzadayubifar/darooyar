@@ -113,6 +113,16 @@ func main() {
 	protected.HandleFunc("POST /api/credit/subtract", creditHandler.SubtractCredit)
 	protected.HandleFunc("GET /api/credit/user", creditHandler.GetUserCreditByID)
 
+	// Plan and subscription routes
+	protected.HandleFunc("GET /api/plans", handlers.GetAllPlans)
+	protected.HandleFunc("GET /api/plans/{id}", handlers.GetPlanByID)
+	protected.HandleFunc("POST /api/plans", handlers.CreatePlan) // Admin only
+	protected.HandleFunc("POST /api/subscriptions/purchase", handlers.PurchasePlan)
+	protected.HandleFunc("GET /api/subscriptions", handlers.GetUserSubscriptions)
+	protected.HandleFunc("GET /api/subscriptions/active", handlers.GetActiveUserSubscriptions)
+	protected.HandleFunc("POST /api/subscriptions/use", handlers.UseSubscription)
+	protected.HandleFunc("GET /api/transactions", handlers.GetCreditTransactions)
+
 	// Apply auth middleware to protected routes
 	mux.Handle("/api/", middleware.AuthMiddleware(protected))
 

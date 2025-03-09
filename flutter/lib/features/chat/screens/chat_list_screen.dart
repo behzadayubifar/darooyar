@@ -8,11 +8,96 @@ import 'chat_screen.dart';
 import 'folder_list_screen.dart';
 import '../../auth/providers/auth_providers.dart';
 
+// This is the original ConsumerWidget version that is referenced in main.dart
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Redirect to the stateful version
+    return const ChatListScreenWithRefresh();
+  }
+}
+
+// This is the new ConsumerStatefulWidget version with refresh functionality
+class ChatListScreenWithRefresh extends ConsumerStatefulWidget {
+  const ChatListScreenWithRefresh({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<ChatListScreenWithRefresh> createState() =>
+      _ChatListScreenWithRefreshState();
+}
+
+class _ChatListScreenWithRefreshState
+    extends ConsumerState<ChatListScreenWithRefresh>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Refresh chat list when screen is first shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshChatList();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh chat list when app is resumed
+      _refreshChatList();
+    }
+  }
+
+  Future<void> _refreshChatList() async {
+    // Check if user is authenticated before refreshing
+    final authState = ref.read(authStateProvider);
+    if (authState.hasValue && authState.valueOrNull != null) {
+      // Show a loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('در حال بارگذاری گفتگوها...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      await ref.read(chatListProvider.notifier).loadChats();
+
+      // Provide feedback on completion
+      if (mounted) {
+        // Check the state to see if there was an error
+        final state = ref.read(chatListProvider);
+        if (state is AsyncError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('خطا در بارگذاری گفتگوها. لطفاً دوباره تلاش کنید.'),
+              backgroundColor: AppTheme.errorColor,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('گفتگوها با موفقیت بارگذاری شدند.'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final chatsAsync = ref.watch(chatListProvider);
     final selectedFolder = ref.watch(selectedFolderProvider);
     final foldersAsync = ref.watch(folderNotifierProvider);
@@ -61,90 +146,64 @@ class ChatListScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: chatsAsync.when(
-        data: (chats) {
-          // Filter chats by selected folder if needed
-          final filteredChats = selectedFolder != null
-              ? chats
-                  .where((chat) => chat.folderId == selectedFolder.id)
-                  .toList()
-              : chats;
+      body: RefreshIndicator(
+        onRefresh: _refreshChatList,
+        child: chatsAsync.when(
+          data: (chats) {
+            // Filter chats by selected folder if needed
+            final filteredChats = selectedFolder != null
+                ? chats
+                    .where((chat) => chat.folderId == selectedFolder.id)
+                    .toList()
+                : chats;
 
-          if (filteredChats.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            if (filteredChats.isEmpty) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  Lottie.asset(
-                    'assets/animations/empty_chat.json',
-                    width: 200,
-                    height: 200,
-                    repeat: true,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    selectedFolder != null
-                        ? 'این پوشه خالی است'
-                        : 'هنوز گفتگویی ندارید',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor,
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Lottie.asset(
+                            'assets/animations/empty_chat.json',
+                            width: 200,
+                            height: 200,
+                            repeat: true,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            selectedFolder != null
+                                ? 'این پوشه خالی است'
+                                : 'هنوز گفتگویی ندارید',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            selectedFolder != null
+                                ? 'برای افزودن گفتگو به این پوشه، یک گفتگو ایجاد کنید یا از منوی گفتگوهای موجود استفاده کنید'
+                                : 'برای شروع گفتگو روی دکمه + کلیک کنید',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.textSecondaryColor,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    selectedFolder != null
-                        ? 'برای افزودن گفتگو به این پوشه، یک گفتگو ایجاد کنید یا از منوی گفتگوهای موجود استفاده کنید'
-                        : 'برای شروع گفتگو روی دکمه + کلیک کنید',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
-              ),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              // Show a loading indicator
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('در حال بارگذاری گفتگوها...'),
-                  duration: Duration(seconds: 1),
-                ),
               );
+            }
 
-              // Perform the refresh operation
-              await ref.read(chatListProvider.notifier).loadChats();
-
-              // Provide feedback on completion
-              if (!context.mounted) return;
-
-              // Check the state to see if there was an error
-              final state = ref.read(chatListProvider);
-              if (state is AsyncError) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'خطا در بارگذاری گفتگوها. لطفاً دوباره تلاش کنید.'),
-                    backgroundColor: AppTheme.errorColor,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('گفتگوها با موفقیت بارگذاری شدند.'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              }
-            },
-            child: ListView.builder(
+            return ListView.builder(
               padding: const EdgeInsets.all(8),
               itemCount: filteredChats.length,
               itemBuilder: (context, index) {
@@ -237,30 +296,38 @@ class ChatListScreen extends ConsumerWidget {
                   ),
                 );
               },
-            ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: AppTheme.errorColor,
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'خطا در دریافت گفتگوها:\n${error.toString()}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.errorColor),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () =>
-                    ref.read(chatListProvider.notifier).loadChats(),
-                child: const Text('تلاش مجدد'),
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.7,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: AppTheme.errorColor,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'خطا در دریافت گفتگوها:\n${error.toString()}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.errorColor),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () =>
+                            ref.read(chatListProvider.notifier).loadChats(),
+                        child: const Text('تلاش مجدد'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

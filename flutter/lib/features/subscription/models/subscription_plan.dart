@@ -33,69 +33,69 @@ class SubscriptionPlan {
   });
 
   // Lista de planes predefinidos
-  static List<SubscriptionPlan> allPlans = [
-    SubscriptionPlan(
-      id: 'cephalexin',
-      name: 'سفالکسین',
-      description: 'پلن اقتصادی برای استفاده کوتاه مدت',
-      hasTimeLimit: true,
-      timeLimitDays: 7,
-      keepsPreviousVersions: false,
-      dataRetentionDays: 0,
-      prescriptionCount: 3,
-      price: 45.0, // 45 هزار تومان
-      features: [
-        'دسترسی به تمام امکانات پایه',
-        'محدودیت زمانی ۱ هفته',
-        'بدون حفظ نسخه‌های قبلی',
-        'ثبت ۳ نسخه',
-      ],
-      imagePath: 'assets/images/plans/basic_plan.svg',
-      fallbackIcon: Icons.medication_outlined,
-      iconColor: Colors.orange,
-    ),
-    SubscriptionPlan(
-      id: 'cefuroxime',
-      name: 'سفوروکسیم',
-      description: 'پلن متوسط با امکانات کاربردی',
-      hasTimeLimit: false,
-      timeLimitDays: 0,
-      keepsPreviousVersions: true,
-      dataRetentionDays: 30,
-      prescriptionCount: 10,
-      price: 135.0, // 135 هزار تومان
-      features: [
-        'دسترسی به تمام امکانات پایه',
-        'بدون محدودیت زمانی',
-        'حفظ نسخه‌های قبلی تا ۱ ماه',
-        'ثبت ۱۰ نسخه',
-      ],
-      imagePath: 'assets/images/plans/standard_plan.svg',
-      fallbackIcon: Icons.medical_services_outlined,
-      iconColor: Colors.blue,
-    ),
-    SubscriptionPlan(
-      id: 'cefixime',
-      name: 'سفکسیم',
-      description: 'پلن پیشرفته با امکانات کامل',
-      hasTimeLimit: false,
-      timeLimitDays: 0,
-      keepsPreviousVersions: true,
-      dataRetentionDays: 365,
-      prescriptionCount: 30,
-      price: 375.0, // 375 هزار تومان
-      features: [
-        'دسترسی به تمام امکانات پیشرفته',
-        'بدون محدودیت زمانی',
-        'حفظ نسخه‌های قبلی تا ۱ سال',
-        'ثبت ۳۰ نسخه',
-        'پشتیبانی اختصاصی',
-      ],
-      imagePath: 'assets/images/plans/premium_plan.svg',
-      fallbackIcon: Icons.health_and_safety_outlined,
-      iconColor: Colors.indigo,
-    ),
-  ];
+  static List<SubscriptionPlan> get allPlans => [
+        SubscriptionPlan(
+          id: 'cephalexin',
+          name: 'سفالکسین',
+          description: 'پلن اقتصادی برای استفاده کوتاه مدت',
+          hasTimeLimit: true,
+          timeLimitDays: 7,
+          keepsPreviousVersions: false,
+          dataRetentionDays: 0,
+          prescriptionCount: 3,
+          price: 45.0, // 45 هزار تومان
+          features: [
+            'دسترسی به تمام امکانات پایه',
+            'محدودیت زمانی ۱ هفته',
+            'بدون حفظ نسخه‌های قبلی',
+            'ثبت ۳ نسخه',
+          ],
+          imagePath: 'assets/images/plans/basic_plan.svg',
+          fallbackIcon: Icons.medication_outlined,
+          iconColor: Colors.orange,
+        ),
+        SubscriptionPlan(
+          id: 'cefuroxime',
+          name: 'سفوروکسیم',
+          description: 'پلن متوسط با امکانات کاربردی',
+          hasTimeLimit: false,
+          timeLimitDays: 0,
+          keepsPreviousVersions: true,
+          dataRetentionDays: 30,
+          prescriptionCount: 10,
+          price: 135.0, // 135 هزار تومان
+          features: [
+            'دسترسی به تمام امکانات پایه',
+            'بدون محدودیت زمانی',
+            'حفظ نسخه‌های قبلی تا ۱ ماه',
+            'ثبت ۱۰ نسخه',
+          ],
+          imagePath: 'assets/images/plans/standard_plan.svg',
+          fallbackIcon: Icons.medical_services_outlined,
+          iconColor: Colors.blue,
+        ),
+        SubscriptionPlan(
+          id: 'cefixime',
+          name: 'سفکسیم',
+          description: 'پلن پیشرفته با امکانات کامل',
+          hasTimeLimit: false,
+          timeLimitDays: 0,
+          keepsPreviousVersions: true,
+          dataRetentionDays: 365,
+          prescriptionCount: 30,
+          price: 375.0, // 375 هزار تومان
+          features: [
+            'دسترسی به تمام امکانات پیشرفته',
+            'بدون محدودیت زمانی',
+            'حفظ نسخه‌های قبلی تا ۱ سال',
+            'ثبت ۳۰ نسخه',
+            'پشتیبانی اختصاصی',
+          ],
+          imagePath: 'assets/images/plans/premium_plan.svg',
+          fallbackIcon: Icons.health_and_safety_outlined,
+          iconColor: Colors.indigo,
+        ),
+      ];
 
   // Método para obtener detalles formatados del plan
   String getTimeInfo() {

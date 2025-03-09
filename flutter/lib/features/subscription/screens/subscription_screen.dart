@@ -17,7 +17,6 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _selectedIndex = 0;
   bool _showSuccess = false;
 
   @override
@@ -28,7 +27,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
         TabController(length: SubscriptionPlan.allPlans.length, vsync: this);
     _tabController.addListener(() {
       setState(() {
-        _selectedIndex = _tabController.index;
+        // No need to update _selectedIndex since it's not used
       });
     });
   }
@@ -50,6 +49,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       );
       return;
     }
+
+    // Store context in a local variable to avoid using it across async gaps
+    final currentContext = context;
 
     final user = authState.value!;
 
@@ -80,7 +82,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(currentContext).showSnackBar(
           SnackBar(content: Text(e.toString())),
         );
       }
@@ -400,7 +402,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.star,
                                   color: Colors.white,
                                   size: 14,
@@ -710,39 +712,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                           ],
                         ],
                       ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Nuevo método para crear distintivos de características clave
-  Widget _buildKeyFeatureBadge(
-      BuildContext context, String text, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: Colors.white,
-          ),
-          const SizedBox(width: 5),
-          Directionality(
-            textDirection: TextDirection.rtl,
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.white,
               ),
             ),
           ),

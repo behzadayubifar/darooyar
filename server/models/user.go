@@ -12,6 +12,7 @@ type User struct {
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`
 	Credit    float64   `json:"credit"`
+	IsAdmin   bool      `json:"is_admin"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -36,5 +37,6 @@ type UserResponse struct {
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`
 	Credit    float64   `json:"credit"`
+	IsAdmin   bool      `json:"is_admin"`
 	CreatedAt time.Time `json:"created_at"`
 }

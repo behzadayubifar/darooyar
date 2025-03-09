@@ -11,9 +11,9 @@ import (
 // CreateUser creates a new user in the database
 func CreateUser(user *models.UserCreate) (*models.User, error) {
 	query := `
-		INSERT INTO users (username, email, password, first_name, last_name, credit, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, username, email, first_name, last_name, credit, created_at, updated_at`
+		INSERT INTO users (username, email, password, first_name, last_name, credit, is_admin, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, username, email, first_name, last_name, credit, is_admin, created_at, updated_at`
 
 	now := time.Now()
 	var newUser models.User
@@ -24,7 +24,8 @@ func CreateUser(user *models.UserCreate) (*models.User, error) {
 		user.Password, // Note: Password should be hashed before being passed here
 		user.FirstName,
 		user.LastName,
-		0.0, // Default credit value for new users
+		0.0,   // Default credit value for new users
+		false, // Default is_admin value for new users
 		now,
 		now,
 	).Scan(
@@ -34,6 +35,7 @@ func CreateUser(user *models.UserCreate) (*models.User, error) {
 		&newUser.FirstName,
 		&newUser.LastName,
 		&newUser.Credit,
+		&newUser.IsAdmin,
 		&newUser.CreatedAt,
 		&newUser.UpdatedAt,
 	)
@@ -48,7 +50,7 @@ func CreateUser(user *models.UserCreate) (*models.User, error) {
 // GetUserByEmail retrieves a user by email
 func GetUserByEmail(email string) (*models.User, error) {
 	query := `
-		SELECT id, username, email, password, first_name, last_name, credit, created_at, updated_at
+		SELECT id, username, email, password, first_name, last_name, credit, is_admin, created_at, updated_at
 		FROM users
 		WHERE email = $1`
 
@@ -61,6 +63,7 @@ func GetUserByEmail(email string) (*models.User, error) {
 		&user.FirstName,
 		&user.LastName,
 		&user.Credit,
+		&user.IsAdmin,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -78,7 +81,7 @@ func GetUserByEmail(email string) (*models.User, error) {
 // GetUserByID retrieves a user by ID
 func GetUserByID(id int64) (*models.User, error) {
 	query := `
-		SELECT id, username, email, first_name, last_name, credit, created_at, updated_at
+		SELECT id, username, email, first_name, last_name, credit, is_admin, created_at, updated_at
 		FROM users
 		WHERE id = $1`
 
@@ -90,6 +93,7 @@ func GetUserByID(id int64) (*models.User, error) {
 		&user.FirstName,
 		&user.LastName,
 		&user.Credit,
+		&user.IsAdmin,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -153,5 +157,16 @@ func SubtractUserCredit(userID int64, amount float64) error {
 		WHERE id = $3`
 
 	_, err = DB.Exec(query, amount, time.Now(), userID)
+	return err
+}
+
+// SetUserAdmin sets a user's admin status
+func SetUserAdmin(userID int64, isAdmin bool) error {
+	query := `
+		UPDATE users
+		SET is_admin = $1, updated_at = $2
+		WHERE id = $3`
+
+	_, err := DB.Exec(query, isAdmin, time.Now(), userID)
 	return err
 }

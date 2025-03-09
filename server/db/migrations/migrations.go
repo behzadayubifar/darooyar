@@ -40,6 +40,11 @@ func RunInMemoryMigrations() error {
 		return err
 	}
 
+	// Add is_admin field to users and create gift_transactions table
+	if err := addGiftTransactions(); err != nil {
+		return err
+	}
+
 	log.Println("In-memory database migrations completed successfully")
 	return nil
 }
@@ -182,4 +187,34 @@ func addCreditToUsers() error {
 	}
 
 	return nil
+}
+
+// addGiftTransactions adds the is_admin field to users and creates the gift_transactions table
+func addGiftTransactions() error {
+	log.Println("Adding is_admin field to users and creating gift_transactions table if they don't exist...")
+
+	// Add is_admin field to users
+	_, err := db.DB.Exec(`
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create gift_transactions table
+	_, err = db.DB.Exec(`
+		CREATE TABLE IF NOT EXISTS gift_transactions (
+			id SERIAL PRIMARY KEY,
+			admin_id BIGINT NOT NULL REFERENCES users(id),
+			user_id BIGINT NOT NULL REFERENCES users(id),
+			gift_type VARCHAR(50) NOT NULL,
+			plan_id BIGINT REFERENCES plans(id),
+			credit_amount DECIMAL(10, 2),
+			message TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		);
+		CREATE INDEX IF NOT EXISTS idx_gift_transactions_user_id ON gift_transactions(user_id);
+		CREATE INDEX IF NOT EXISTS idx_gift_transactions_admin_id ON gift_transactions(admin_id);
+	`)
+	return err
 }

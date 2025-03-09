@@ -537,3 +537,255 @@ func GetCurrentUserSubscription(userID int64) (*models.UserSubscription, error) 
 
 	return &sub, nil
 }
+
+// CreateGiftTransaction creates a new gift transaction record
+func CreateGiftTransaction(gift *models.GiftTransaction) (*models.GiftTransaction, error) {
+	query := `
+		INSERT INTO gift_transactions (admin_id, user_id, gift_type, plan_id, credit_amount, message, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, admin_id, user_id, gift_type, plan_id, credit_amount, message, created_at`
+
+	err := DB.QueryRow(
+		query,
+		gift.AdminID,
+		gift.UserID,
+		gift.GiftType,
+		gift.PlanID,
+		gift.CreditAmount,
+		gift.Message,
+		time.Now(),
+	).Scan(
+		&gift.ID,
+		&gift.AdminID,
+		&gift.UserID,
+		&gift.GiftType,
+		&gift.PlanID,
+		&gift.CreditAmount,
+		&gift.Message,
+		&gift.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return gift, nil
+}
+
+// GiftPlanToUser gifts a plan to a user and creates a gift transaction
+func GiftPlanToUser(adminID, userID, planID int64, message string) error {
+	// Start a transaction
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create a subscription for the user
+	now := time.Now()
+
+	// Get the plan details
+	var plan models.Plan
+	err = tx.QueryRow(`
+		SELECT id, title, description, price, duration_days, max_uses, plan_type, created_at, updated_at
+		FROM plans
+		WHERE id = $1`, planID).Scan(
+		&plan.ID,
+		&plan.Title,
+		&plan.Description,
+		&plan.Price,
+		&plan.DurationDays,
+		&plan.MaxUses,
+		&plan.PlanType,
+		&plan.CreatedAt,
+		&plan.UpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Calculate expiry date if applicable
+	var expiryDate *time.Time
+	if plan.DurationDays != nil {
+		expiry := now.AddDate(0, 0, *plan.DurationDays)
+		expiryDate = &expiry
+	}
+
+	// Create the subscription
+	var subscriptionID int64
+	err = tx.QueryRow(`
+		INSERT INTO user_subscriptions (user_id, plan_id, purchase_date, expiry_date, status, uses_count, remaining_uses, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id`,
+		userID,
+		planID,
+		now,
+		expiryDate,
+		models.SubscriptionStatusActive,
+		0,
+		plan.MaxUses,
+		now,
+		now,
+	).Scan(&subscriptionID)
+	if err != nil {
+		return err
+	}
+
+	// Create a gift transaction record
+	_, err = tx.Exec(`
+		INSERT INTO gift_transactions (admin_id, user_id, gift_type, plan_id, message, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		adminID,
+		userID,
+		models.GiftTypePlan,
+		planID,
+		message,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Commit the transaction
+	return tx.Commit()
+}
+
+// GiftCreditToUser gifts credit to a user and creates a gift transaction
+func GiftCreditToUser(adminID, userID int64, amount float64, message string) error {
+	// Start a transaction
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	now := time.Now()
+
+	// Add credit to the user
+	_, err = tx.Exec(`
+		UPDATE users
+		SET credit = credit + $1, updated_at = $2
+		WHERE id = $3`,
+		amount, now, userID)
+	if err != nil {
+		return err
+	}
+
+	// Create a credit transaction record
+	_, err = tx.Exec(`
+		INSERT INTO credit_transactions (user_id, amount, description, transaction_type, created_at)
+		VALUES ($1, $2, $3, $4, $5)`,
+		userID,
+		amount,
+		"Gift from admin: "+message,
+		"gift",
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Create a gift transaction record
+	_, err = tx.Exec(`
+		INSERT INTO gift_transactions (admin_id, user_id, gift_type, credit_amount, message, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		adminID,
+		userID,
+		models.GiftTypeCredit,
+		amount,
+		message,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Commit the transaction
+	return tx.Commit()
+}
+
+// GetUserGiftTransactions retrieves all gift transactions for a user
+func GetUserGiftTransactions(userID int64) ([]*models.GiftTransaction, error) {
+	query := `
+		SELECT id, admin_id, user_id, gift_type, plan_id, credit_amount, message, created_at
+		FROM gift_transactions
+		WHERE user_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := DB.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var gifts []*models.GiftTransaction
+	for rows.Next() {
+		var gift models.GiftTransaction
+		if err := rows.Scan(
+			&gift.ID,
+			&gift.AdminID,
+			&gift.UserID,
+			&gift.GiftType,
+			&gift.PlanID,
+			&gift.CreditAmount,
+			&gift.Message,
+			&gift.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		gifts = append(gifts, &gift)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return gifts, nil
+}
+
+// GetAdminGiftTransactions retrieves all gift transactions made by an admin
+func GetAdminGiftTransactions(adminID int64) ([]*models.GiftTransaction, error) {
+	query := `
+		SELECT id, admin_id, user_id, gift_type, plan_id, credit_amount, message, created_at
+		FROM gift_transactions
+		WHERE admin_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := DB.Query(query, adminID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var gifts []*models.GiftTransaction
+	for rows.Next() {
+		var gift models.GiftTransaction
+		if err := rows.Scan(
+			&gift.ID,
+			&gift.AdminID,
+			&gift.UserID,
+			&gift.GiftType,
+			&gift.PlanID,
+			&gift.CreditAmount,
+			&gift.Message,
+			&gift.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		gifts = append(gifts, &gift)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return gifts, nil
+}

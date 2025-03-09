@@ -69,6 +69,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
 			Credit:    user.Credit,
+			IsAdmin:   user.IsAdmin,
 			CreatedAt: user.CreatedAt,
 		},
 		Token: token,
@@ -124,6 +125,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
 			Credit:    user.Credit,
+			IsAdmin:   user.IsAdmin,
 			CreatedAt: user.CreatedAt,
 		},
 		Token: token,
@@ -163,6 +165,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 		Credit:    user.Credit,
+		IsAdmin:   user.IsAdmin,
 		CreatedAt: user.CreatedAt,
 	}
 
@@ -194,13 +197,7 @@ func (h *AuthHandler) VerifyToken(w http.ResponseWriter, r *http.Request) {
 		"user_id":   userID,
 		"username":  user.Username,
 		"credit":    user.Credit,
+		"is_admin":  user.IsAdmin,
 		"is_active": true,
 	})
-}
-
-// Helper function to send error responses in JSON format
-func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{"message": message})
 }

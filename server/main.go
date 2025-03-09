@@ -49,6 +49,7 @@ func main() {
 	chatHandler := handlers.NewChatHandler()
 	folderHandler := handlers.NewFolderHandler()
 	creditHandler := handlers.NewCreditHandler()
+	giftHandler := handlers.NewGiftHandler()
 
 	// Define API routes
 
@@ -116,13 +117,19 @@ func main() {
 	// Plan and subscription routes
 	protected.HandleFunc("GET /api/plans", handlers.GetAllPlans)
 	protected.HandleFunc("GET /api/plans/{id}", handlers.GetPlanByID)
-	protected.HandleFunc("POST /api/plans", middleware.RequireAuth(handlers.CreatePlan)) // Admin only
+	protected.HandleFunc("POST /api/plans", middleware.RequireAdmin(handlers.CreatePlan)) // Admin only
 	protected.HandleFunc("POST /api/subscriptions/purchase", handlers.PurchasePlan)
 	protected.HandleFunc("GET /api/subscriptions", handlers.GetUserSubscriptions)
 	protected.HandleFunc("GET /api/subscriptions/active", handlers.GetActiveUserSubscriptions)
 	protected.HandleFunc("GET /api/subscriptions/current", handlers.GetCurrentUserSubscription)
 	protected.HandleFunc("POST /api/subscriptions/use", handlers.UseSubscription)
 	protected.HandleFunc("GET /api/transactions", handlers.GetCreditTransactions)
+
+	// Gift routes (admin only)
+	protected.HandleFunc("POST /api/gifts/plan", middleware.RequireAdmin(giftHandler.GiftPlanToUser))
+	protected.HandleFunc("POST /api/gifts/credit", middleware.RequireAdmin(giftHandler.GiftCreditToUser))
+	protected.HandleFunc("GET /api/gifts/user/{id}", middleware.RequireAdmin(giftHandler.GetUserGiftTransactions))
+	protected.HandleFunc("GET /api/gifts/admin", middleware.RequireAdmin(giftHandler.GetAdminGiftTransactions))
 
 	// Apply auth middleware to protected routes
 	mux.Handle("/api/", middleware.AuthMiddleware(protected))

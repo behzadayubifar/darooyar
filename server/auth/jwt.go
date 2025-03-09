@@ -14,16 +14,18 @@ var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 // Claims represents the JWT claims
 type Claims struct {
-	UserID int64  `json:"user_id"`
-	Email  string `json:"email"`
+	UserID  int64  `json:"user_id"`
+	Email   string `json:"email"`
+	IsAdmin bool   `json:"is_admin"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken creates a new JWT token for a user
 func GenerateToken(user *models.User) (string, error) {
 	claims := Claims{
-		UserID: user.ID,
-		Email:  user.Email,
+		UserID:  user.ID,
+		Email:   user.Email,
+		IsAdmin: user.IsAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

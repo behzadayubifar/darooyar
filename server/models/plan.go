@@ -22,6 +22,14 @@ const (
 	SubscriptionStatusCancelled SubscriptionStatus = "cancelled"
 )
 
+// GiftType defines the type of gift
+type GiftType string
+
+const (
+	GiftTypePlan   GiftType = "plan"   // Gift a plan
+	GiftTypeCredit GiftType = "credit" // Gift credit
+)
+
 // Plan represents a subscription plan
 type Plan struct {
 	ID           int64     `json:"id"`
@@ -59,6 +67,32 @@ type CreditTransaction struct {
 	TransactionType       string    `json:"transaction_type"`
 	RelatedSubscriptionID *int64    `json:"related_subscription_id"`
 	CreatedAt             time.Time `json:"created_at"`
+}
+
+// GiftTransaction represents a gift from an admin to a user
+type GiftTransaction struct {
+	ID           int64     `json:"id"`
+	AdminID      int64     `json:"admin_id"`
+	UserID       int64     `json:"user_id"`
+	GiftType     GiftType  `json:"gift_type"`
+	PlanID       *int64    `json:"plan_id,omitempty"`
+	CreditAmount *float64  `json:"credit_amount,omitempty"`
+	Message      string    `json:"message"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// GiftPlanRequest represents a request to gift a plan to a user
+type GiftPlanRequest struct {
+	UserID  int64  `json:"user_id"`
+	PlanID  int64  `json:"plan_id"`
+	Message string `json:"message"`
+}
+
+// GiftCreditRequest represents a request to gift credit to a user
+type GiftCreditRequest struct {
+	UserID  int64   `json:"user_id"`
+	Amount  float64 `json:"amount"`
+	Message string  `json:"message"`
 }
 
 // PlanCreate represents data required to create a new plan

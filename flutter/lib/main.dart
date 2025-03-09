@@ -17,6 +17,7 @@ import 'features/settings/screens/settings_screen.dart';
 import 'features/chat/services/chat_service.dart';
 import 'features/subscription/screens/subscription_screen.dart';
 import 'features/chat/providers/chat_providers.dart';
+import 'features/dashboard/screens/dashboard_screen.dart';
 
 // Flag to track if API endpoint discovery has been run
 bool _apiEndpointDiscoveryRun = false;
@@ -147,13 +148,15 @@ class MyApp extends ConsumerWidget {
         return MaterialPageRoute(builder: (context) {
           switch (settings.name) {
             case '/home':
+              return const DashboardScreen();
+            case '/chat_history':
               return const ChatListScreen();
             case '/settings':
               return SettingsScreen(user: authState.value!);
             case '/subscription':
               return const SubscriptionScreen();
             default:
-              return const ChatListScreen();
+              return const DashboardScreen();
           }
         });
       },

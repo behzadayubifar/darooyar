@@ -3,8 +3,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import '../../../core/utils/logger.dart';
 import '../../auth/providers/auth_providers.dart';
-import '../models/subscription_plan.dart';
-import '../providers/subscription_provider.dart';
+import '../models/plan.dart';
+import '../providers/subscription_providers.dart';
 import '../../../core/utils/number_formatter.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
@@ -16,31 +16,28 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late PageController _pageController;
+  int _currentPage = 0;
   bool _showSuccess = false;
 
   @override
   void initState() {
     super.initState();
     AppLogger.d('SubscriptionScreen initialized');
-    _tabController =
-        TabController(length: SubscriptionPlan.allPlans.length, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        // No need to update _selectedIndex since it's not used
-      });
-    });
+    _pageController = PageController(
+      viewportFraction: 0.85,
+      initialPage: 0,
+    );
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _pageController.dispose();
     AppLogger.d('SubscriptionScreen disposed');
     super.dispose();
   }
 
-  Future<void> _purchasePlan(
-      BuildContext context, SubscriptionPlan plan) async {
+  Future<void> _purchasePlan(BuildContext context, Plan plan) async {
     final authState = ref.read(authStateProvider);
 
     if (!authState.hasValue || authState.value == null) {
@@ -63,15 +60,22 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     }
 
     try {
-      final success =
-          await ref.read(purchaseStateProvider.notifier).purchasePlan(plan.id);
+      // Use the subscription service to purchase the plan
+      final subscriptionService = ref.read(subscriptionServiceProvider);
+      final token = await ref.read(authServiceProvider).getToken();
 
-      if (success && mounted) {
+      if (token == null) {
+        throw Exception('لطفا ابتدا وارد شوید');
+      }
+
+      await subscriptionService.purchasePlan(token, plan.id);
+
+      if (mounted) {
         setState(() {
           _showSuccess = true;
         });
 
-        // Mostrar animación de éxito durante unos segundos y luego volver al estado normal
+        // Show success animation for a few seconds and then return to normal state
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() {
@@ -79,6 +83,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             });
           }
         });
+
+        // Refresh user data to update credit
+        ref.read(authStateProvider.notifier).refreshUser();
       }
     } catch (e) {
       if (mounted) {
@@ -91,12 +98,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final purchaseState = ref.watch(purchaseStateProvider);
-    final isLoading = purchaseState is AsyncLoading<void>;
+    final plansAsync = ref.watch(plansProvider);
     final currentUser = ref.watch(authStateProvider).valueOrNull;
     final currentUserCredit = currentUser?.credit ?? 0.0;
 
-    // Si estamos en estado de éxito, mostrar una animación de éxito
+    // If we're in success state, show a success animation
     if (_showSuccess) {
       return Scaffold(
         appBar: AppBar(
@@ -157,7 +163,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       ),
       body: Column(
         children: [
-          // Información sobre el crédito actual
+          // Current credit information
           Container(
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -211,14 +217,31 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                       const SizedBox(height: 4),
                       Directionality(
                         textDirection: TextDirection.rtl,
-                        child: Text(
-                          NumberFormatter.formatPriceInThousands(
-                              currentUserCredit.toStringAsFixed(0)),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _formatPriceInThousands(currentUserCredit),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _getPriceUnit(currentUserCredit),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -226,7 +249,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                 ),
                 TextButton.icon(
                   onPressed: () {
-                    // Navegar a la pantalla de recarga de crédito
+                    // Navigate to credit recharge screen
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content: Text('این قابلیت به زودی اضافه خواهد شد')),
@@ -248,42 +271,71 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             ),
           ),
 
-          // Tabs para los planes
-          TabBar(
-            controller: _tabController,
-            indicatorSize: TabBarIndicatorSize.label,
-            indicatorWeight: 3,
-            labelStyle: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-            ),
-            unselectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.normal,
-              fontSize: 14,
-            ),
-            indicatorColor: _getPlanColor(
-                SubscriptionPlan.allPlans[_tabController.index].id, context),
-            labelColor: _getPlanColor(
-                SubscriptionPlan.allPlans[_tabController.index].id, context),
-            unselectedLabelColor:
-                Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-            tabs: SubscriptionPlan.allPlans
-                .map((plan) => Tab(
-                      child: Text(
-                        plan.name,
-                      ),
-                    ))
-                .toList(),
-          ),
-
-          // Contenido de los planes
+          // Plans content
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: SubscriptionPlan.allPlans.map((plan) {
-                return _buildPlanCard(
-                    context, plan, isLoading, currentUserCredit);
-              }).toList(),
+            child: plansAsync.when(
+              data: (plans) {
+                if (plans.isEmpty) {
+                  return const Center(
+                    child: Text('هیچ پلنی یافت نشد'),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    // Page indicator
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          plans.length,
+                          (index) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            height: 8,
+                            width: _currentPage == index ? 24 : 8,
+                            decoration: BoxDecoration(
+                              color: _currentPage == index
+                                  ? _getPlanColor(
+                                      plans[index].planType, context)
+                                  : Colors.grey.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // PageView for plans
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: plans.length,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentPage = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return _buildPlanCard(
+                            context,
+                            plans[index],
+                            false,
+                            currentUserCredit,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              error: (error, stackTrace) => Center(
+                child: Text('خطا در بارگذاری پلن‌ها: $error'),
+              ),
             ),
           ),
         ],
@@ -291,19 +343,19 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     );
   }
 
-  Widget _buildPlanCard(BuildContext context, SubscriptionPlan plan,
-      bool isLoading, double userCredit) {
+  Widget _buildPlanCard(
+      BuildContext context, Plan plan, bool isLoading, double userCredit) {
     final bool canAfford = userCredit >= plan.price;
 
-    // Obtener el color y el icono basándose en el ID del plan
-    final Color planColor = _getPlanColor(plan.id, context);
-    final IconData planIcon = _getPlanIcon(plan.id);
+    // Get color and icon based on plan type
+    final Color planColor = _getPlanColor(plan.planType, context);
+    final IconData planIcon = _getPlanIcon(plan.planType);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       child: Column(
         children: [
-          // Encabezado del plan con fondo de gradiente y animación de elevación
+          // Plan header with gradient background and elevation animation
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             width: double.infinity,
@@ -330,7 +382,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             ),
             child: Column(
               children: [
-                // Animación sutil de elevación
+                // Subtle elevation animation
                 TweenAnimationBuilder<double>(
                   tween: Tween<double>(begin: 0, end: 1),
                   duration: const Duration(milliseconds: 600),
@@ -367,98 +419,54 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Título del plan y badge de "más popular" si es el plan cefixime
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Text(
-                      plan.name,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (plan.id == 'cefixime')
-                      Positioned(
-                        top: -15,
-                        left: -70,
-                        child: Transform.rotate(
-                          angle: -0.2, // Ángulo de rotación en radianes
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.shade700,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.amber.shade700.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.star,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 4),
-                                const Text(
-                                  'محبوب‌ترین',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                // Plan title
+                Text(
+                  plan.title,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  plan.description,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Text(
-                    NumberFormatter.formatPriceInThousands(
-                        plan.price.toStringAsFixed(0)),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                // Plan price
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _formatPriceInThousands(plan.price),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        _getPriceUnit(plan.price),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Características del plan - فضای بیشتر برای ویژگی‌های کامل
+          // Plan details
           Expanded(
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius:
@@ -471,374 +479,201 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                   ),
                 ],
               ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Indicador de desplazamiento
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Plan description
+                  Text(
+                    plan.description,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.7),
                     ),
+                  ),
+                  const SizedBox(height: 16),
 
-                    // Nuevo diseño mejorado para características
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 20, horizontal: 18),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white,
-                            planColor.withOpacity(0.05),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: planColor.withOpacity(0.15),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: planColor.withOpacity(0.07),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
+                  // Plan features
+                  Expanded(
+                    child: SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Cabecera con contador de características
-                          Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: Row(
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: planColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 10, horizontal: 14),
-                                  child: Directionality(
-                                    textDirection: TextDirection.rtl,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.list_alt_rounded,
-                                          color: planColor,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text(
-                                          'ویژگی‌های این پلن',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: planColor.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    '${plan.features.length}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: planColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          // Duration
+                          _buildFeatureItem(
+                            context,
+                            Icons.access_time,
+                            plan.formattedDuration,
                           ),
+                          const SizedBox(height: 12),
 
-                          Container(
-                            margin: const EdgeInsets.symmetric(vertical: 16),
-                            height: 1,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  planColor.withOpacity(0.3),
-                                  Colors.transparent,
-                                ],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                            ),
+                          // Usage
+                          _buildFeatureItem(
+                            context,
+                            Icons.format_list_numbered,
+                            plan.formattedUses,
                           ),
+                          const SizedBox(height: 12),
 
-                          // Sección de características clave
-                          Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: Row(
-                              children: [
-                                Icon(Icons.stars_rounded,
-                                    color: planColor, size: 18),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'نکات کلیدی:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildKeyPoint(context, plan.getTimeInfo(),
-                              Icons.timer_outlined, planColor),
-                          _buildKeyPoint(context, plan.getRetentionInfo(),
-                              Icons.history, planColor),
-                          _buildKeyPoint(context, plan.getPrescriptionInfo(),
-                              Icons.description_outlined, planColor),
-
-                          Container(
-                            margin: const EdgeInsets.symmetric(vertical: 16),
-                            height: 1,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  planColor.withOpacity(0.3),
-                                  Colors.transparent,
-                                ],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                            ),
-                          ),
-
-                          // Lista de características
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: ListView.separated(
-                                physics: const NeverScrollableScrollPhysics(),
-                                shrinkWrap: true,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 6),
-                                itemCount: plan.features.length,
-                                separatorBuilder: (context, index) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (context, index) {
-                                  return _buildFeatureItem(
-                                      context, plan.features[index], planColor,
-                                      index: index);
-                                },
-                              ),
-                            ),
+                          // Plan type
+                          _buildFeatureItem(
+                            context,
+                            Icons.category,
+                            plan.isTimeBased && plan.isUsageBased
+                                ? 'محدودیت زمانی و تعداد استفاده'
+                                : plan.isTimeBased
+                                    ? 'محدودیت زمانی'
+                                    : 'محدودیت تعداد استفاده',
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+                  ),
 
-          const SizedBox(height: 16),
-
-          // Botón de compra
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: canAfford && !isLoading
-                    ? [
-                        BoxShadow(
-                          color: planColor.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
+                  // Purchase button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isLoading || !canAfford
+                          ? null
+                          : () => _purchasePlan(context, plan),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: planColor,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ]
-                    : null,
-              ),
-              child: ElevatedButton(
-                onPressed: canAfford && !isLoading
-                    ? () => _purchasePlan(context, plan)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                  backgroundColor: planColor,
-                  foregroundColor: Colors.white,
-                ),
-                child: isLoading
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            canAfford ? 'خرید اشتراک' : 'اعتبار ناکافی',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (canAfford) ...[
-                            const SizedBox(width: 8),
-                            const Icon(Icons.shopping_cart_outlined, size: 20),
-                          ],
-                        ],
+                        elevation: 4,
                       ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Nuevo método para construir cada item de característica de manera más compacta y atractiva
-  Widget _buildFeatureItem(
-      BuildContext context, String feature, Color planColor,
-      {int? index}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: BoxDecoration(
-        color: planColor.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: planColor.withOpacity(0.15), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: planColor.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icono de verificación con estilo mejorado
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: planColor.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.check,
-                  color: planColor,
-                  size: 12,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  feature,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.9),
-                    fontWeight: FontWeight.w500,
-                    height: 1.5,
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              canAfford ? 'خرید اشتراک' : 'اعتبار ناکافی',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
                   ),
-                  softWrap: true,
-                  textAlign: TextAlign.right,
-                ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Color _getPlanColor(String planId, BuildContext context) {
-    switch (planId) {
-      case 'cephalexin':
-        // سبز مایل به فیروزه‌ای - برای پلن پایه و اقتصادی
-        // سبز نشان‌دهنده تازگی، آرامش و شروع است، مناسب برای مرحله آشنایی
-        return Color(0xFF26A69A);
-      case 'cefuroxime':
-        // آبی - برای پلن متوسط
-        // آبی حس اعتماد، امنیت و ثبات را القا می‌کند
-        return Color(0xFF5C6BC0);
-      case 'cefixime':
-        // بنفش متمایل به طلایی - برای پلن پیشرفته
-        // بنفش و طلایی حس لوکس بودن، قدرت و پرستیژ را منتقل می‌کند
-        return Color(0xFF7E57C2);
+  Widget _buildFeatureItem(BuildContext context, IconData icon, String text) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: Theme.of(context).colorScheme.primary,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _getPlanColor(String planType, BuildContext context) {
+    switch (planType) {
+      case 'time_based':
+        return Colors.blue;
+      case 'usage_based':
+        return Colors.orange;
+      case 'both':
+        return Colors.indigo;
       default:
         return Theme.of(context).colorScheme.primary;
     }
   }
 
-  IconData _getPlanIcon(String planId) {
-    switch (planId) {
-      case 'cephalexin':
-        return Icons.medication_outlined;
-      case 'cefuroxime':
-        return Icons.medical_services_outlined;
-      case 'cefixime':
+  IconData _getPlanIcon(String planType) {
+    switch (planType) {
+      case 'time_based':
+        return Icons.access_time;
+      case 'usage_based':
+        return Icons.format_list_numbered;
+      case 'both':
         return Icons.health_and_safety_outlined;
       default:
-        return Icons.medication_outlined;
+        return Icons.medical_services_outlined;
     }
   }
 
-  Widget _buildKeyPoint(
-      BuildContext context, String info, IconData icon, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                info,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  // Helper method to format price by removing zeros appropriately
+  String _formatPriceInThousands(double price) {
+    // For prices >= 1,000,000,000, show as billion
+    if (price >= 1000000000) {
+      double priceInBillions = price / 1000000000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInBillions % 1 == 0
+          ? priceInBillions.toInt().toString()
+          : priceInBillions
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+    // For prices >= 1,000,000, show as million
+    else if (price >= 1000000) {
+      double priceInMillions = price / 1000000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInMillions % 1 == 0
+          ? priceInMillions.toInt().toString()
+          : priceInMillions
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+    // For smaller prices, show as thousand
+    else {
+      double priceInThousands = price / 1000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInThousands % 1 == 0
+          ? priceInThousands.toInt().toString()
+          : priceInThousands
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+  }
+
+  // Helper method to get the appropriate price unit based on the price value
+  String _getPriceUnit(double price) {
+    if (price >= 1000000000) {
+      return 'میلیارد تومن';
+    } else if (price >= 1000000) {
+      return 'میلیون تومن';
+    } else {
+      return 'هزار تومن';
+    }
   }
 }

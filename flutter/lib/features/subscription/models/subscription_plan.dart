@@ -43,7 +43,7 @@ class SubscriptionPlan {
           keepsPreviousVersions: false,
           dataRetentionDays: 0,
           prescriptionCount: 3,
-          price: 45.0, // 45 هزار تومان
+          price: 45.0, // 45 هزار تومن
           features: [
             'دسترسی به تمام امکانات پایه',
             'محدودیت زمانی ۱ هفته',
@@ -63,7 +63,7 @@ class SubscriptionPlan {
           keepsPreviousVersions: true,
           dataRetentionDays: 30,
           prescriptionCount: 10,
-          price: 135.0, // 135 هزار تومان
+          price: 135.0, // 135 هزار تومن
           features: [
             'دسترسی به تمام امکانات پایه',
             'بدون محدودیت زمانی',
@@ -83,7 +83,7 @@ class SubscriptionPlan {
           keepsPreviousVersions: true,
           dataRetentionDays: 365,
           prescriptionCount: 30,
-          price: 375.0, // 375 هزار تومان
+          price: 375.0, // 375 هزار تومن
           features: [
             'دسترسی به تمام امکانات پیشرفته',
             'بدون محدودیت زمانی',

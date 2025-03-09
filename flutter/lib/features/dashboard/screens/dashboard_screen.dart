@@ -293,14 +293,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ],
           ),
           const SizedBox(height: 20),
-          Text(
-            NumberFormatter.formatPriceInThousands(
-                user?.credit.toStringAsFixed(0) ?? '0'),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _formatPrice(user?.credit ?? 0),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                _getPriceUnit(user?.credit ?? 0),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
@@ -1056,5 +1068,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ),
       ),
     );
+  }
+
+  // Helper method to format price by removing zeros appropriately
+  String _formatPrice(double price) {
+    // For prices >= 1,000,000,000, show as billion
+    if (price >= 1000000000) {
+      double priceInBillions = price / 1000000000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInBillions % 1 == 0
+          ? priceInBillions.toInt().toString()
+          : priceInBillions
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+    // For prices >= 1,000,000, show as million
+    else if (price >= 1000000) {
+      double priceInMillions = price / 1000000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInMillions % 1 == 0
+          ? priceInMillions.toInt().toString()
+          : priceInMillions
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+    // For smaller prices, show as thousand
+    else {
+      double priceInThousands = price / 1000;
+      // Format with 2 decimal places if needed, otherwise show as integer
+      String formatted = priceInThousands % 1 == 0
+          ? priceInThousands.toInt().toString()
+          : priceInThousands
+              .toStringAsFixed(2)
+              .replaceAll(RegExp(r'\.?0*$'), '');
+      return NumberFormatter.formatWithCommas(formatted);
+    }
+  }
+
+  // Helper method to get the appropriate price unit based on the price value
+  String _getPriceUnit(double price) {
+    if (price >= 1000000000) {
+      return 'میلیارد تومن';
+    } else if (price >= 1000000) {
+      return 'میلیون تومن';
+    } else {
+      return 'هزار تومن';
+    }
   }
 }

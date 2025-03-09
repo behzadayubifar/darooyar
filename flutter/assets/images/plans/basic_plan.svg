@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" rx="20" fill="#f0f0f0" />
+  <circle cx="100" cy="80" r="40" fill="#ff8a65" />
+  <text x="100" y="150" font-family="Arial" font-size="24" text-anchor="middle" fill="#333">سفالکسین</text>
+  <text x="100" y="180" font-family="Arial" font-size="16" text-anchor="middle" fill="#666">پلن پایه</text>
+</svg> 

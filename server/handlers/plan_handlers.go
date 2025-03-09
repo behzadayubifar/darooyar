@@ -89,6 +89,18 @@ func PurchasePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if user already has an active subscription
+	activeSubscription, err := db.GetCurrentUserSubscription(userID)
+	if err != nil {
+		http.Error(w, "Error checking current subscription: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if activeSubscription != nil {
+		http.Error(w, "You already have an active subscription. Please wait until it expires before purchasing a new one.", http.StatusConflict)
+		return
+	}
+
 	// Verify plan exists
 	plan, err := db.GetPlanByID(request.PlanID)
 	if err != nil {

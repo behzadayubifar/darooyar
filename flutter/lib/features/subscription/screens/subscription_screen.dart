@@ -5,6 +5,7 @@ import '../../../core/utils/logger.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../models/plan.dart';
 import '../providers/subscription_providers.dart';
+import '../providers/subscription_provider.dart' as provider;
 import '../../../core/utils/number_formatter.dart';
 import '../screens/subscription_success_screen.dart';
 
@@ -267,6 +268,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   Widget _buildPlanCard(
       BuildContext context, Plan plan, bool isLoading, double userCredit) {
     final bool canAfford = userCredit >= plan.price;
+
+    // Check if user has an active subscription
+    final currentPlanAsync = ref.watch(provider.currentPlanProvider);
+    final bool hasActivePlan = currentPlanAsync.maybeWhen(
+      data: (plan) => plan != null,
+      orElse: () => false,
+    );
 
     // Get color and icon based on plan type
     final Color planColor = _getPlanColor(plan.planType, context, plan);
@@ -651,7 +659,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: canAfford && !isLoading
+                        onPressed: canAfford && !isLoading && !hasActivePlan
                             ? () => _purchasePlan(context, plan)
                             : null,
                         style: ElevatedButton.styleFrom(
@@ -665,32 +673,22 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                         ),
                         child: isLoading
                             ? const SizedBox(
-                                width: 24,
-                                height: 24,
+                                height: 20,
+                                width: 20,
                                 child: CircularProgressIndicator(
-                                  color: Colors.white,
                                   strokeWidth: 2,
+                                  color: Colors.white,
                                 ),
                               )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
+                            : hasActivePlan
+                                ? const Text('شما اشتراک فعال دارید')
+                                : Text(
                                     canAfford ? 'خرید اشتراک' : 'اعتبار ناکافی',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    canAfford
-                                        ? Icons.shopping_cart
-                                        : Icons.account_balance_wallet,
-                                    size: 20,
-                                  ),
-                                ],
-                              ),
                       ),
                     ),
                   ],

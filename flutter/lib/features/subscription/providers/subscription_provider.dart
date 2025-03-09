@@ -62,19 +62,18 @@ class PurchaseStateNotifier extends StateNotifier<AsyncValue<void>> {
         throw Exception('لطفا ابتدا وارد شوید');
       }
 
-      // Obtener el usuario actual para verificar el crédito
-      final user = await authService.getCurrentUser();
-      if (user == null) {
-        throw Exception('خطا در دریافت اطلاعات کاربر');
+      // Check if user already has an active plan
+      final currentPlan = await _ref.read(currentPlanProvider.future);
+      if (currentPlan != null) {
+        throw Exception(
+            'شما در حال حاضر یک اشتراک فعال دارید. لطفا تا زمان انقضای آن صبر کنید.');
       }
 
       // Obtener servicio de suscripción
       final subscriptionService = _ref.read(subscriptionServiceProvider);
 
-      // En un entorno real, usaríamos purchasePlan con el token,
-      // pero usaremos simulatePurchase para demostración
-      final success =
-          await subscriptionService.simulatePurchase(planId, user.credit);
+      // Purchase the plan using the real API
+      await subscriptionService.purchasePlan(token, planId);
 
       // Actualizar el estado si fue exitoso
       state = const AsyncValue.data(null);
@@ -85,7 +84,7 @@ class PurchaseStateNotifier extends StateNotifier<AsyncValue<void>> {
       // Refrescar la información del usuario para actualizar el crédito
       _ref.read(authStateProvider.notifier).refreshUser();
 
-      return success;
+      return true;
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
       AppLogger.e('Purchase plan error: $e');

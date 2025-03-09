@@ -125,6 +125,9 @@ class SubscriptionService {
         }
       } else if (response.statusCode == 402) {
         throw Exception('Insufficient credit');
+      } else if (response.statusCode == 409) {
+        throw Exception(
+            'شما در حال حاضر یک اشتراک فعال دارید. لطفا تا زمان انقضای آن صبر کنید.');
       } else {
         AppLogger.e('Error purchasing plan: ${response.statusCode}');
         throw Exception('Failed to purchase plan');

@@ -98,245 +98,163 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final plansAsync = ref.watch(plansProvider);
-    final currentUser = ref.watch(authStateProvider).valueOrNull;
-    final currentUserCredit = currentUser?.credit ?? 0.0;
-
-    // If we're in success state, show a success animation
-    if (_showSuccess) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('خرید اشتراک'),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Lottie.asset(
-                'assets/animations/success.json',
-                width: 200,
-                height: 200,
-                repeat: false,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'خرید شما با موفقیت انجام شد!',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'از خرید شما متشکریم',
-                style: TextStyle(
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _showSuccess = false;
-                  });
-                },
-                icon: const Icon(Icons.check_circle),
-                label: const Text('بازگشت به پلن‌ها'),
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    // دریافت اعتبار کاربر از authStateProvider
+    final authState = ref.watch(authStateProvider);
+    final currentUserCredit = authState.valueOrNull?.credit ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('خرید اشتراک'),
+        centerTitle: true,
         elevation: 0,
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Current credit information
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                ],
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
+          // پس‌زمینه زیبا با گرادیان و الگوی نقطه‌ای
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Theme.of(context).colorScheme.surface,
+                    Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                  ],
+                ),
               ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+              child: CustomPaint(
+                painter: DotPatternPainter(
+                  color:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.05),
                 ),
-              ],
+              ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
+          ),
+
+          Column(
+            children: [
+              // نمایش اعتبار کاربر
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.1),
+                      width: 1,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.account_balance_wallet,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Directionality(
-                        textDirection: TextDirection.rtl,
-                        child: Text(
-                          'اعتبار فعلی شما:',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
+                      Text(
+                        'اعتبار شما:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Directionality(
-                        textDirection: TextDirection.rtl,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _formatPriceInThousands(currentUserCredit),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _getPriceUnit(currentUserCredit),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        '${NumberFormatter.formatPriceInThousands(currentUserCredit)} تومان',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () {
-                    // Navigate to credit recharge screen
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('این قابلیت به زودی اضافه خواهد شد')),
-                    );
-                  },
-                  icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text(
-                    'افزایش',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white24,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
 
-          // Plans content
-          Expanded(
-            child: plansAsync.when(
-              data: (plans) {
-                if (plans.isEmpty) {
-                  return const Center(
-                    child: Text('هیچ پلنی یافت نشد'),
-                  );
-                }
-
-                return Column(
-                  children: [
-                    // Page indicator
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          plans.length,
-                          (index) => AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            height: 8,
-                            width: _currentPage == index ? 24 : 8,
-                            decoration: BoxDecoration(
-                              color: _currentPage == index
-                                  ? _getPlanColor(
-                                      plans[index].planType, context)
-                                  : Colors.grey.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // PageView for plans
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: plans.length,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentPage = index;
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          return _buildPlanCard(
-                            context,
-                            plans[index],
-                            false,
-                            currentUserCredit,
+              // لیست پلن‌ها
+              Expanded(
+                child: ref.watch(plansProvider).when(
+                      data: (plans) {
+                        if (plans.isEmpty) {
+                          return const Center(
+                            child: Text('هیچ پلنی یافت نشد'),
                           );
-                        },
+                        }
+
+                        return Column(
+                          children: [
+                            // Page indicator
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(
+                                  plans.length,
+                                  (index) => AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    height: 8,
+                                    width: _currentPage == index ? 24 : 8,
+                                    decoration: BoxDecoration(
+                                      color: _currentPage == index
+                                          ? _getPlanColor(plans[index].planType,
+                                              context, plans[index])
+                                          : Colors.grey.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // PageView for plans
+                            Expanded(
+                              child: PageView.builder(
+                                controller: _pageController,
+                                itemCount: plans.length,
+                                onPageChanged: (index) {
+                                  setState(() {
+                                    _currentPage = index;
+                                  });
+                                },
+                                physics: const BouncingScrollPhysics(),
+                                padEnds: true,
+                                pageSnapping: true,
+                                itemBuilder: (context, index) {
+                                  return _buildPlanCard(
+                                    context,
+                                    plans[index],
+                                    false,
+                                    currentUserCredit,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                      loading: () => const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                      error: (error, stackTrace) => Center(
+                        child: Text('خطا در بارگذاری پلن‌ها: $error'),
                       ),
                     ),
-                  ],
-                );
-              },
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
               ),
-              error: (error, stackTrace) => Center(
-                child: Text('خطا در بارگذاری پلن‌ها: $error'),
-              ),
-            ),
+            ],
           ),
         ],
       ),
@@ -348,224 +266,534 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     final bool canAfford = userCredit >= plan.price;
 
     // Get color and icon based on plan type
-    final Color planColor = _getPlanColor(plan.planType, context);
-    final IconData planIcon = _getPlanIcon(plan.planType);
+    final Color planColor = _getPlanColor(plan.planType, context, plan);
+    final IconData planIcon = _getPlanIcon(plan.planType, plan);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-      child: Column(
-        children: [
-          // Plan header with gradient background and elevation animation
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  planColor.withOpacity(0.9),
-                  planColor.withOpacity(0.7),
-                  planColor,
+    // تعریف رنگ‌های ثانویه برای گرادیان‌های زیباتر
+    final Color secondaryColor = plan.planType == 'both'
+        ? const Color(0xFF66BB6A) // سبز روشن‌تر برای پلن پایه
+        : (plan.price >= 300000
+            ? const Color(0xFFBA68C8) // بنفش روشن‌تر برای پلن پیشرفته
+            : const Color(0xFF42A5F5)); // آبی روشن‌تر برای پلن متوسط
+
+    // تعیین نام پلن برای نمایش عناصر مناسب
+    final String planName = _getPlanName(plan);
+
+    // استفاده از RepaintBoundary برای بهبود عملکرد رندرینگ
+    return RepaintBoundary(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        child: Column(
+          children: [
+            // Plan header with enhanced gradient background and elevation animation
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    planColor.withOpacity(0.8),
+                    secondaryColor.withOpacity(0.9),
+                    planColor,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+                boxShadow: [
+                  BoxShadow(
+                    color: planColor.withOpacity(0.5),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
               ),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-              boxShadow: [
-                BoxShadow(
-                  color: planColor.withOpacity(0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // Subtle elevation animation
-                TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 600),
-                  builder: (context, value, child) {
-                    return Transform.translate(
-                      offset: Offset(0, -5 * value),
-                      child: Opacity(
-                        opacity: value,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: SizedBox(
-                    height: 70,
-                    width: 70,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
+              child: Stack(
+                children: [
+                  // پترن پس‌زمینه متناسب با نوع پلن
+                  Positioned.fill(
+                    child: _buildPlanPattern(planName),
+                  ),
+                  Column(
+                    children: [
+                      // Enhanced elevation animation - با استفاده از key برای جلوگیری از خطا هنگام جابجایی
+                      TweenAnimationBuilder<double>(
+                        key: ValueKey('icon_animation_${plan.id}'),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutBack,
+                        builder: (context, value, child) {
+                          return Transform.translate(
+                            offset: Offset(0, -6 * value),
+                            child: Opacity(
+                              opacity: value.clamp(0.0, 1.0),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.5),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                        ],
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // افکت درخشش پشت آیکون
+                              Container(
+                                height: 60,
+                                width: 60,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withOpacity(0.5),
+                                      blurRadius: 20,
+                                      spreadRadius: 5,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // آیکون اصلی
+                              Icon(
+                                planIcon,
+                                size: 45,
+                                color: Colors.white,
+                              ),
+                              // نشانگر ویژگی خاص پلن
+                              if (plan.title == 'سفکسیم' ||
+                                  (plan.planType == 'usage_based' &&
+                                      plan.price >= 300000)) // پلن پیشرفته
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.amber,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.star,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        planIcon,
-                        size: 40,
-                        color: Colors.white,
+                      const SizedBox(height: 20),
+                      // Plan title with animation
+                      TweenAnimationBuilder<double>(
+                        key: ValueKey('title_animation_${plan.id}'),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value.clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(15 * (1 - value), 0),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              plan.title,
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black26,
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // نشانگر پلن پیشرفته
+                            if (plan.title == 'سفکسیم' ||
+                                (plan.planType == 'usage_based' &&
+                                    plan.price >= 300000))
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'ویژه',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 10),
+                      // Plan price with animation
+                      TweenAnimationBuilder<double>(
+                        key: ValueKey('price_animation_${plan.id}'),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value.clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(-15 * (1 - value), 0),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _formatPriceInThousands(plan.price),
+                                style: const TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black26,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                _getPriceUnit(plan.price),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Plan details with enhanced design
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius:
+                      const BorderRadius.vertical(bottom: Radius.circular(28)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                // Plan title
-                Text(
-                  plan.title,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Plan price
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
+                    // Plan description with animation - با استفاده از key برای جلوگیری از خطا هنگام جابجایی
+                    TweenAnimationBuilder<double>(
+                      key: ValueKey('desc_animation_${plan.id}'),
+                      tween: Tween<double>(begin: 0, end: 1),
+                      duration: const Duration(milliseconds: 800),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value.clamp(
+                              0.0, 1.0), // اطمینان از محدوده صحیح opacity
+                          child: child,
+                        );
+                      },
                       child: Text(
-                        _formatPriceInThousands(plan.price),
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        plan.description,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.8),
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        _getPriceUnit(plan.price),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.white70,
+                    const SizedBox(height: 20),
+
+                    // Plan features with staggered animation - استفاده از LimitedBox برای جلوگیری از overflow
+                    Expanded(
+                      child: LimitedBox(
+                        maxHeight:
+                            300, // محدود کردن ارتفاع برای جلوگیری از overflow
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Duration
+                              _buildFeatureItemAnimated(
+                                context,
+                                Icons.access_time,
+                                plan.formattedDuration,
+                                planColor,
+                                0,
+                                plan.id,
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Uses
+                              _buildFeatureItemAnimated(
+                                context,
+                                Icons.format_list_numbered,
+                                plan.formattedUses,
+                                planColor,
+                                1,
+                                plan.id,
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Plan type
+                              _buildFeatureItemAnimated(
+                                context,
+                                Icons.category,
+                                plan.isTimeBased && plan.isUsageBased
+                                    ? 'محدودیت زمانی و تعداد استفاده'
+                                    : plan.isTimeBased
+                                        ? 'محدودیت زمانی'
+                                        : 'محدودیت تعداد استفاده',
+                                planColor,
+                                2,
+                                plan.id,
+                              ),
+
+                              // ویژگی‌های اضافی برای پلن‌های خاص
+                              if (plan.title == 'سفکسیم' ||
+                                  (plan.planType == 'usage_based' &&
+                                      plan.price >= 300000)) ...[
+                                const SizedBox(height: 16),
+                                _buildFeatureItemAnimated(
+                                  context,
+                                  Icons.star,
+                                  'دسترسی به تمام امکانات ویژه',
+                                  planColor,
+                                  3,
+                                  plan.id,
+                                ),
+                              ],
+
+                              if (plan.title == 'سفوروکسیم' ||
+                                  plan.title == 'سفکسیم' ||
+                                  (plan.planType == 'usage_based' &&
+                                      plan.price >= 135000)) ...[
+                                const SizedBox(height: 16),
+                                _buildFeatureItemAnimated(
+                                  context,
+                                  Icons.history,
+                                  'نگهداری تاریخچه نسخه‌ها',
+                                  planColor,
+                                  4,
+                                  plan.id,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
+                      ),
+                    ),
+
+                    // Purchase button with enhanced design
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: canAfford && !isLoading
+                            ? () => _purchasePlan(context, plan)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: planColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    canAfford ? 'خرید اشتراک' : 'اعتبار ناکافی',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    canAfford
+                                        ? Icons.shopping_cart
+                                        : Icons.account_balance_wallet,
+                                    size: 20,
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ساخت پترن پس‌زمینه متناسب با نوع پلن
+  Widget _buildPlanPattern(String planName) {
+    switch (planName) {
+      case 'سفالکسین': // پلن پایه
+        return CustomPaint(
+          painter: CirclePatternPainter(
+            color: Colors.white.withOpacity(0.1),
+          ),
+        );
+      case 'سفوروکسیم': // پلن متوسط
+        return CustomPaint(
+          painter: WavePatternPainter(
+            color: Colors.white.withOpacity(0.1),
+          ),
+        );
+      case 'سفکسیم': // پلن پیشرفته
+        return CustomPaint(
+          painter: DiamondPatternPainter(
+            color: Colors.white.withOpacity(0.1),
+          ),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // تشخیص نام پلن بر اساس ویژگی‌های آن
+  String _getPlanName(Plan plan) {
+    // استفاده مستقیم از عنوان پلن اگر با نام‌های مورد نظر ما مطابقت داشته باشد
+    if (plan.title == 'سفالکسین' ||
+        plan.title == 'سفوروکسیم' ||
+        plan.title == 'سفکسیم') {
+      return plan.title;
+    }
+
+    // در غیر این صورت بر اساس ویژگی‌ها تشخیص می‌دهیم
+    if (plan.planType == 'both') {
+      return 'سفالکسین'; // پلن پایه
+    } else if (plan.price >= 300000) {
+      return 'سفکسیم'; // پلن پیشرفته
+    } else {
+      return 'سفوروکسیم'; // پلن متوسط
+    }
+  }
+
+  // ساخت آیتم ویژگی با انیمیشن
+  Widget _buildFeatureItemAnimated(
+    BuildContext context,
+    IconData icon,
+    String text,
+    Color planColor,
+    int index,
+    String planId,
+  ) {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('feature_${index}_${planId}'),
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 400 + (index * 50)),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(20 * (1 - value), 0),
+            child: child,
+          ),
+        );
+      },
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: planColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: planColor.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: planColor,
+              size: 22,
             ),
           ),
-
-          // Plan details
+          const SizedBox(width: 14),
           Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Plan description
-                  Text(
-                    plan.description,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Plan features
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Duration
-                          _buildFeatureItem(
-                            context,
-                            Icons.access_time,
-                            plan.formattedDuration,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Usage
-                          _buildFeatureItem(
-                            context,
-                            Icons.format_list_numbered,
-                            plan.formattedUses,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Plan type
-                          _buildFeatureItem(
-                            context,
-                            Icons.category,
-                            plan.isTimeBased && plan.isUsageBased
-                                ? 'محدودیت زمانی و تعداد استفاده'
-                                : plan.isTimeBased
-                                    ? 'محدودیت زمانی'
-                                    : 'محدودیت تعداد استفاده',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Purchase button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isLoading || !canAfford
-                          ? null
-                          : () => _purchasePlan(context, plan),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: planColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 4,
-                      ),
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              canAfford ? 'خرید اشتراک' : 'اعتبار ناکافی',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -574,56 +802,132 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     );
   }
 
-  Widget _buildFeatureItem(BuildContext context, IconData icon, String text) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: Theme.of(context).colorScheme.primary,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  Color _getPlanColor(String planType, BuildContext context,
+      [Plan? specificPlan]) {
+    // رنگ‌بندی بر اساس روانشناسی رنگ‌ها
+    // سفالکسین (پلن پایه): رنگ سبز - نشانه رشد، تازگی و مقرون به صرفه بودن
+    // سفوروکسیم (پلن متوسط): رنگ آبی - نشانه اعتماد، امنیت و ثبات
+    // سفکسیم (پلن پیشرفته): رنگ بنفش - نشانه لوکس بودن، خلاقیت و ارزش بالا
 
-  Color _getPlanColor(String planType, BuildContext context) {
+    // اگر پلن مشخصی ارسال شده باشد، از آن استفاده می‌کنیم
+    if (specificPlan != null) {
+      // پلن پایه (سفالکسین)
+      if (specificPlan.planType == 'both') {
+        return const Color(0xFF4CAF50); // سبز زنده برای پلن پایه
+      }
+
+      // پلن پیشرفته (سفکسیم)
+      if (specificPlan.planType == 'usage_based' &&
+          specificPlan.price >= 300000) {
+        return const Color(0xFF9C27B0); // بنفش برای پلن پیشرفته
+      }
+
+      // پلن متوسط (سفوروکسیم)
+      if (specificPlan.planType == 'usage_based') {
+        return const Color(0xFF1976D2); // آبی برای پلن متوسط
+      }
+    }
+
+    // بررسی نوع پلن و قیمت آن برای تعیین رنگ مناسب
+    final plansData = ref.read(plansProvider);
+
+    if (plansData.hasValue && plansData.value != null) {
+      final plans = plansData.value!;
+
+      // پلن پایه (سفالکسین)
+      if (planType == 'both') {
+        return const Color(0xFF4CAF50); // سبز زنده برای پلن پایه
+      }
+
+      // پلن‌های استفاده‌محور (سفوروکسیم و سفکسیم)
+      if (planType == 'usage_based' && plans.length > 1) {
+        // پیدا کردن پلن فعلی
+        final currentPlan = plans.firstWhere(
+          (p) => p.planType == planType,
+          orElse: () => plans.first,
+        );
+
+        // پلن پیشرفته (سفکسیم) - گران‌ترین پلن
+        if (currentPlan.price >= 300000) {
+          return const Color(0xFF9C27B0); // بنفش برای پلن پیشرفته
+        }
+
+        // پلن متوسط (سفوروکسیم)
+        return const Color(0xFF1976D2); // آبی برای پلن متوسط
+      }
+    }
+
+    // رنگ‌های پیش‌فرض بر اساس نوع پلن
     switch (planType) {
       case 'time_based':
-        return Colors.blue;
+        return const Color(0xFF4CAF50); // سبز
       case 'usage_based':
-        return Colors.orange;
+        return const Color(0xFF1976D2); // آبی
       case 'both':
-        return Colors.indigo;
+        return const Color(0xFF4CAF50); // سبز
       default:
         return Theme.of(context).colorScheme.primary;
     }
   }
 
-  IconData _getPlanIcon(String planType) {
+  IconData _getPlanIcon(String planType, [Plan? specificPlan]) {
+    // آیکون‌های متناسب با هر پلن
+
+    // اگر پلن مشخصی ارسال شده باشد، از آن استفاده می‌کنیم
+    if (specificPlan != null) {
+      // پلن پایه (سفالکسین)
+      if (specificPlan.planType == 'both') {
+        return Icons.medication_rounded; // آیکون دارو برای پلن پایه (سفالکسین)
+      }
+
+      // پلن پیشرفته (سفکسیم)
+      if (specificPlan.planType == 'usage_based' &&
+          specificPlan.price >= 300000) {
+        return Icons.workspace_premium; // آیکون پریمیوم برای پلن پیشرفته
+      }
+
+      // پلن متوسط (سفوروکسیم)
+      if (specificPlan.planType == 'usage_based') {
+        return Icons.health_and_safety; // آیکون سلامت برای پلن متوسط
+      }
+    }
+
+    final plansData = ref.read(plansProvider);
+
+    if (plansData.hasValue && plansData.value != null) {
+      final plans = plansData.value!;
+
+      // پلن پایه (سفالکسین)
+      if (planType == 'both') {
+        return Icons.medication_rounded; // آیکون دارو برای پلن پایه (سفالکسین)
+      }
+
+      // پلن‌های استفاده‌محور (سفوروکسیم و سفکسیم)
+      if (planType == 'usage_based' && plans.length > 1) {
+        // پیدا کردن پلن فعلی
+        final currentPlan = plans.firstWhere(
+          (p) => p.planType == planType,
+          orElse: () => plans.first,
+        );
+
+        // پلن پیشرفته (سفکسیم) - گران‌ترین پلن
+        if (currentPlan.price >= 300000) {
+          return Icons.workspace_premium; // آیکون پریمیوم برای پلن پیشرفته
+        }
+
+        // پلن متوسط (سفوروکسیم)
+        return Icons.health_and_safety; // آیکون سلامت برای پلن متوسط
+      }
+    }
+
+    // آیکون‌های پیش‌فرض بر اساس نوع پلن
     switch (planType) {
       case 'time_based':
-        return Icons.access_time;
+        return Icons.medication_rounded; // آیکون دارو
       case 'usage_based':
-        return Icons.format_list_numbered;
+        return Icons.health_and_safety; // آیکون سلامت
       case 'both':
-        return Icons.health_and_safety_outlined;
+        return Icons.medication_rounded; // آیکون دارو
       default:
         return Icons.medical_services_outlined;
     }
@@ -676,4 +980,129 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       return 'هزار تومن';
     }
   }
+}
+
+// کلاس برای ایجاد الگوی نقطه‌ای در پس‌زمینه
+class DotPatternPainter extends CustomPainter {
+  final Color color;
+
+  DotPatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.fill;
+
+    final spacing = 20.0;
+
+    for (double x = 0; x < size.width; x += spacing) {
+      for (double y = 0; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 1.5, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// پترن دایره‌ای برای پلن پایه
+class CirclePatternPainter extends CustomPainter {
+  final Color color;
+
+  CirclePatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final double maxRadius = size.width * 0.4;
+    final center = Offset(size.width * 0.5, size.height * 0.5);
+
+    for (int i = 1; i <= 4; i++) {
+      canvas.drawCircle(center, maxRadius * i / 4, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// پترن موجی برای پلن متوسط
+class WavePatternPainter extends CustomPainter {
+  final Color color;
+
+  WavePatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final path = Path();
+    final width = size.width;
+    final height = size.height;
+    final waveHeight = height * 0.1;
+    final waveWidth = width * 0.2;
+
+    for (int i = 0; i < 3; i++) {
+      final startY = height * 0.3 + (i * height * 0.2);
+      path.moveTo(0, startY);
+
+      for (double x = 0; x < width; x += waveWidth) {
+        path.quadraticBezierTo(
+          x + (waveWidth / 2),
+          startY + waveHeight,
+          x + waveWidth,
+          startY,
+        );
+      }
+
+      canvas.drawPath(path, paint);
+      path.reset();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// پترن الماسی برای پلن پیشرفته
+class DiamondPatternPainter extends CustomPainter {
+  final Color color;
+
+  DiamondPatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final double diamondSize = size.width * 0.15;
+    final double spacing = diamondSize * 1.5;
+
+    for (double y = 0; y < size.height; y += spacing) {
+      for (double x = 0; x < size.width; x += spacing) {
+        final path = Path();
+        path.moveTo(x, y + diamondSize / 2);
+        path.lineTo(x + diamondSize / 2, y);
+        path.lineTo(x + diamondSize, y + diamondSize / 2);
+        path.lineTo(x + diamondSize / 2, y + diamondSize);
+        path.close();
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

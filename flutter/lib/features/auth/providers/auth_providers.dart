@@ -38,7 +38,9 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
       if (!hasValidToken) {
         debugPrint(
             'AuthStateNotifier: No valid token found, setting auth state to null');
-        state = const AsyncValue.data(null);
+        if (mounted) {
+          state = const AsyncValue.data(null);
+        }
         _isCheckingAuth = false;
         return;
       }
@@ -50,11 +52,11 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
       debugPrint(
           'AuthStateNotifier: User data retrieval result: ${user != null ? 'User found' : 'No user found'}');
 
-      if (user != null) {
+      if (user != null && mounted) {
         debugPrint(
             'AuthStateNotifier: Setting authenticated state with user: ${user.email}');
         state = AsyncValue.data(user);
-      } else {
+      } else if (mounted) {
         // If getCurrentUser returns null despite having a valid token,
         // there might be a server issue or token validation problem
         debugPrint(
@@ -67,14 +69,16 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
       }
     } catch (e) {
       debugPrint('AuthStateNotifier: Error during authentication check: $e');
-      state = AsyncValue.error(e, StackTrace.current);
+      if (mounted) {
+        state = AsyncValue.error(e, StackTrace.current);
 
-      // After a brief delay, set to not authenticated on error
-      Future.delayed(Duration(milliseconds: 500), () {
-        if (mounted) {
-          state = const AsyncValue.data(null);
-        }
-      });
+        // After a brief delay, set to not authenticated on error
+        Future.delayed(Duration(milliseconds: 500), () {
+          if (mounted) {
+            state = const AsyncValue.data(null);
+          }
+        });
+      }
 
       // Try to clear any potentially invalid token
       debugPrint('AuthStateNotifier: Logging out due to error');

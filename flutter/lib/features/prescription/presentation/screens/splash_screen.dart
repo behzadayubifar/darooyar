@@ -24,7 +24,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     Future.delayed(const Duration(milliseconds: 100), _checkInitialization);
 
     // Safety timeout - only if something goes wrong with auth state
-    Future.delayed(const Duration(seconds: 10), () {
+    Future.delayed(const Duration(seconds: 15), () {
       if (mounted && !_hasNavigated && !_safetyTimeoutCancelled) {
         debugPrint('Safety timeout reached, navigating to login');
         _navigateToLogin();
@@ -102,7 +102,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       if (authState is AsyncLoading) {
         debugPrint('Auth state is still loading, waiting...');
         // Schedule another check after a short delay
-        Future.delayed(const Duration(milliseconds: 500), _checkAuthState);
+        Future.delayed(const Duration(milliseconds: 800), _checkAuthState);
         return;
       }
 
@@ -118,14 +118,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           _navigateToHome();
         } else {
           // Only navigate to login if we're sure the user is not authenticated
-          if (!authState.isLoading) {
+          // and we've waited long enough for the auth check to complete
+          if (!authState.isLoading && !_hasNavigated) {
             _navigateToLogin();
           }
         }
       });
     } catch (e) {
       debugPrint('Error processing auth state: $e');
-      if (mounted) {
+      if (mounted && !_hasNavigated) {
         _navigateToLogin();
       }
     }

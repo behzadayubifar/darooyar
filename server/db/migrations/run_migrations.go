@@ -31,7 +31,8 @@ func RunSQLMigrations() error {
 		"003_add_user_credit.sql",
 		"004_add_plan_tables.sql",
 		"005_add_gift_transactions.sql",
-		"006_update_plan_prices.sql",
+		"006_add_initial_plans.sql",
+		"007_fix_plan_duration.sql",
 	}
 
 	// Run each migration if it hasn't been run already

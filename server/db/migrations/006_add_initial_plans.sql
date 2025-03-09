@@ -27,9 +27,9 @@ VALUES (
     'سفوروکسیم', 
     'پلن متوسط با امکانات کاربردی', 
     135000, -- 135,000 Tomans (135 thousand)
-    0, -- No time limit
+    NULL, -- No time limit (NULL means unlimited)
     10, -- 10 prescriptions
-    'usage', -- Only usage limit applies
+    'usage_based', -- Only usage limit applies
     NOW(), 
     NOW()
 );
@@ -41,9 +41,9 @@ VALUES (
     'سفکسیم', 
     'پلن پیشرفته با امکانات کامل', 
     375000, -- 375,000 Tomans (375 thousand)
-    0, -- No time limit
+    NULL, -- No time limit (NULL means unlimited)
     30, -- 30 prescriptions
-    'usage', -- Only usage limit applies
+    'usage_based', -- Only usage limit applies
     NOW(), 
     NOW()
 );

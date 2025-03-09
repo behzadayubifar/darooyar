@@ -61,7 +61,8 @@ class Plan {
   String get formattedPrice => NumberFormatter.formatPriceInThousands(price);
 
   String get formattedDuration {
-    if (durationDays == null) return 'نامحدود';
+    if (durationDays == null || durationDays == 0)
+      return 'بدون محدودیت زمانی ♾️';
     if (durationDays! < 30) return '$durationDays روز';
     if (durationDays! % 30 == 0) {
       int months = durationDays! ~/ 30;

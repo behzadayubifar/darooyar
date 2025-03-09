@@ -66,13 +66,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _saveFormData() {
     if (_formDataSaved || !mounted) return;
 
-    _formDataSaved = true;
     try {
-      ref.read(loginFormProvider.notifier).updateForm(
-            email: _emailController.text,
-            password: _passwordController.text,
-          );
-      AppLogger.d('Saved form data');
+      _formDataSaved = true;
+      if (mounted) {
+        ref.read(loginFormProvider.notifier).updateForm(
+              email: _emailController.text,
+              password: _passwordController.text,
+            );
+        AppLogger.d('Saved form data');
+      }
     } catch (e) {
       AppLogger.e('Error saving form data: $e');
     }
@@ -154,8 +156,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.removeListener(_saveFormData);
 
     // Only save form data if we haven't already and the widget is still mounted
-    if (!_formDataSaved && mounted) {
-      _saveFormData();
+    if (!_formDataSaved) {
+      try {
+        if (mounted) {
+          ref.read(loginFormProvider.notifier).updateForm(
+                email: _emailController.text,
+                password: _passwordController.text,
+              );
+          AppLogger.d('Saved form data on dispose');
+        }
+      } catch (e) {
+        AppLogger.e('Error saving form data on dispose: $e');
+      }
     }
 
     // Dispose controllers

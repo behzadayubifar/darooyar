@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/number_formatter.dart';
 import '../../auth/models/user.dart';
 import '../../auth/providers/auth_providers.dart';
 
@@ -506,7 +507,7 @@ class SettingsScreen extends ConsumerWidget {
                         Directionality(
                           textDirection: TextDirection.rtl,
                           child: Text(
-                            'اعتبار: ${user.credit.toStringAsFixed(2)} تومان',
+                            'اعتبار: ${NumberFormatter.formatPriceInThousands(user.credit.toStringAsFixed(0))}',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium

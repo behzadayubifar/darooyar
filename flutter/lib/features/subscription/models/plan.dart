@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/number_formatter.dart';
 
 class Plan {
   final String id;
@@ -57,7 +58,7 @@ class Plan {
     return 'Plan{id: $id, title: $title, price: $price}';
   }
 
-  String get formattedPrice => '$price تومان';
+  String get formattedPrice => NumberFormatter.formatPriceInThousands(price);
 
   String get formattedDuration {
     if (durationDays == null) return 'نامحدود';
@@ -228,7 +229,7 @@ class CreditTransaction {
 
   String get formattedAmount {
     final sign = isCredit ? '+' : '';
-    return '$sign$amount تومان';
+    return '$sign${NumberFormatter.formatPriceInThousands(amount)}';
   }
 
   String get formattedType {

@@ -34,6 +34,11 @@ func main() {
 		log.Fatalf("Failed to run SQL file database migrations: %v", err)
 	}
 
+	// Run SQL migrations
+	if err := migrations.RunSQLMigrations(); err != nil {
+		log.Fatalf("Failed to run SQL migrations: %v", err)
+	}
+
 	// Run in-memory migrations
 	if err := migrations.RunInMemoryMigrations(); err != nil {
 		log.Fatalf("Failed to run in-memory database migrations: %v", err)

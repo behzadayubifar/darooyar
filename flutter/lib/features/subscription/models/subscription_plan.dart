@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/number_formatter.dart';
 
 class SubscriptionPlan {
   final String id;
@@ -42,7 +43,7 @@ class SubscriptionPlan {
       keepsPreviousVersions: false,
       dataRetentionDays: 0,
       prescriptionCount: 3,
-      price: 45.0,
+      price: 45.0, // 45 هزار تومان
       features: [
         'دسترسی به تمام امکانات پایه',
         'محدودیت زمانی ۱ هفته',
@@ -62,7 +63,7 @@ class SubscriptionPlan {
       keepsPreviousVersions: true,
       dataRetentionDays: 30,
       prescriptionCount: 10,
-      price: 135.0,
+      price: 135.0, // 135 هزار تومان
       features: [
         'دسترسی به تمام امکانات پایه',
         'بدون محدودیت زمانی',
@@ -82,7 +83,7 @@ class SubscriptionPlan {
       keepsPreviousVersions: true,
       dataRetentionDays: 365,
       prescriptionCount: 30,
-      price: 375.0,
+      price: 375.0, // 375 هزار تومان
       features: [
         'دسترسی به تمام امکانات پیشرفته',
         'بدون محدودیت زمانی',
@@ -124,6 +125,6 @@ class SubscriptionPlan {
   }
 
   String getPriceInfo() {
-    return '$price تومان';
+    return NumberFormatter.formatPriceInThousands(price);
   }
 }

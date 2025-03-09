@@ -5,6 +5,7 @@ import '../../../core/utils/logger.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../models/subscription_plan.dart';
 import '../providers/subscription_provider.dart';
+import '../../../core/utils/number_formatter.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({Key? key}) : super(key: key);
@@ -209,7 +210,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                       Directionality(
                         textDirection: TextDirection.rtl,
                         child: Text(
-                          '${currentUserCredit.toStringAsFixed(2)} تومان',
+                          NumberFormatter.formatPriceInThousands(
+                              currentUserCredit.toStringAsFixed(0)),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
@@ -437,7 +439,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
                     borderRadius: BorderRadius.circular(50),
                   ),
                   child: Text(
-                    '${plan.price.toStringAsFixed(0)} تومان',
+                    NumberFormatter.formatPriceInThousands(
+                        plan.price.toStringAsFixed(0)),
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

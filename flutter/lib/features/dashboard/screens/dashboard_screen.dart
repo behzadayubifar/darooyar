@@ -15,6 +15,7 @@ import '../../subscription/models/subscription_plan.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/screens/subscription_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../core/utils/number_formatter.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -293,7 +294,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
           const SizedBox(height: 20),
           Text(
-            '${user?.credit.toStringAsFixed(2) ?? '0.00'} تومان',
+            NumberFormatter.formatPriceInThousands(
+                user?.credit.toStringAsFixed(0) ?? '0'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,

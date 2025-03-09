@@ -469,3 +469,71 @@ func GetCreditTransactions(userID int64, limit, offset int) ([]*models.CreditTra
 
 	return transactions, nil
 }
+
+// GetCurrentUserSubscription retrieves the most recent active subscription for a user
+func GetCurrentUserSubscription(userID int64) (*models.UserSubscription, error) {
+	query := `
+		SELECT 
+			s.id, s.user_id, s.plan_id, s.purchase_date, s.expiry_date, 
+			s.status, s.uses_count, s.remaining_uses, s.created_at, s.updated_at,
+			p.id, p.title, p.description, p.price, p.duration_days, 
+			p.max_uses, p.plan_type, p.created_at, p.updated_at
+		FROM user_subscriptions s
+		JOIN plans p ON s.plan_id = p.id
+		WHERE s.user_id = $1 AND s.status = $2
+		ORDER BY s.purchase_date DESC
+		LIMIT 1`
+
+	var sub models.UserSubscription
+	var plan models.Plan
+
+	err := DB.QueryRow(query, userID, models.SubscriptionStatusActive).Scan(
+		&sub.ID,
+		&sub.UserID,
+		&sub.PlanID,
+		&sub.PurchaseDate,
+		&sub.ExpiryDate,
+		&sub.Status,
+		&sub.UsesCount,
+		&sub.RemainingUses,
+		&sub.CreatedAt,
+		&sub.UpdatedAt,
+		&plan.ID,
+		&plan.Title,
+		&plan.Description,
+		&plan.Price,
+		&plan.DurationDays,
+		&plan.MaxUses,
+		&plan.PlanType,
+		&plan.CreatedAt,
+		&plan.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No active subscription found
+		}
+		return nil, err
+	}
+
+	sub.Plan = &plan
+
+	// Check if subscription is actually expired
+	if sub.IsExpired() {
+		// Update status in DB
+		updateQuery := `
+			UPDATE user_subscriptions
+			SET status = $1, updated_at = $2
+			WHERE id = $3`
+
+		_, err := DB.Exec(updateQuery, models.SubscriptionStatusExpired, time.Now(), sub.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Return nil as the subscription is expired
+		return nil, nil
+	}
+
+	return &sub, nil
+}

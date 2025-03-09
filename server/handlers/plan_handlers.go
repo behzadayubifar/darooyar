@@ -242,3 +242,41 @@ func GetCreditTransactions(w http.ResponseWriter, r *http.Request) {
 		"transactions": transactions,
 	})
 }
+
+// GetCurrentUserSubscription handles retrieving the current active subscription for a user
+func GetCurrentUserSubscription(w http.ResponseWriter, r *http.Request) {
+	// Get user ID from context (set during authentication)
+	userID := r.Context().Value("user_id").(int64)
+
+	// Get current subscription from database
+	subscription, err := db.GetCurrentUserSubscription(userID)
+	if err != nil {
+		http.Error(w, "Error retrieving current subscription: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return response
+	w.Header().Set("Content-Type", "application/json")
+
+	if subscription == nil {
+		// No active subscription found, return 404
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "No active subscription found",
+		})
+		return
+	}
+
+	// Convert to response model
+	response := models.UserSubscriptionResponse{
+		ID:            subscription.ID,
+		Plan:          subscription.Plan,
+		PurchaseDate:  subscription.PurchaseDate,
+		ExpiryDate:    subscription.ExpiryDate,
+		Status:        subscription.Status,
+		UsesCount:     subscription.UsesCount,
+		RemainingUses: subscription.RemainingUses,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}

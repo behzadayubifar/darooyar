@@ -14,6 +14,7 @@ import '../../subscription/models/plan.dart';
 import '../../subscription/models/subscription_plan.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/screens/subscription_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -283,17 +284,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   fontSize: 14,
                 ),
               ),
-              Image.asset(
-                'assets/images/credit_card_chip.png',
+              SvgPicture.asset(
+                'assets/images/credit_card_chip.svg',
                 height: 30,
                 width: 30,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.credit_card,
-                    color: Colors.white70,
-                    size: 30,
-                  );
-                },
               ),
             ],
           ),

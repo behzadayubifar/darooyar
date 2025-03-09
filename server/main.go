@@ -65,7 +65,7 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	})
 
-	// Auth endpoints (no middleware)
+	// Public endpoints (no auth required)
 	mux.HandleFunc("POST /api/auth/register", authHandler.Register)
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
 
@@ -116,10 +116,11 @@ func main() {
 	// Plan and subscription routes
 	protected.HandleFunc("GET /api/plans", handlers.GetAllPlans)
 	protected.HandleFunc("GET /api/plans/{id}", handlers.GetPlanByID)
-	protected.HandleFunc("POST /api/plans", handlers.CreatePlan) // Admin only
+	protected.HandleFunc("POST /api/plans", middleware.RequireAuth(handlers.CreatePlan)) // Admin only
 	protected.HandleFunc("POST /api/subscriptions/purchase", handlers.PurchasePlan)
 	protected.HandleFunc("GET /api/subscriptions", handlers.GetUserSubscriptions)
 	protected.HandleFunc("GET /api/subscriptions/active", handlers.GetActiveUserSubscriptions)
+	protected.HandleFunc("GET /api/subscriptions/current", handlers.GetCurrentUserSubscription)
 	protected.HandleFunc("POST /api/subscriptions/use", handlers.UseSubscription)
 	protected.HandleFunc("GET /api/transactions", handlers.GetCreditTransactions)
 
@@ -128,6 +129,9 @@ func main() {
 
 	// Configure CORS middleware
 	handler := corsMiddleware(mux)
+
+	// Apply the auth check middleware to all routes
+	handler = middleware.AuthCheckMiddleware(handler)
 
 	// Set up the server
 	server := &http.Server{

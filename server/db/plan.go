@@ -356,7 +356,7 @@ func GetActiveUserSubscriptions(userID int64) ([]*models.UserSubscription, error
 
 		sub.Plan = &plan
 
-		// Check if subscription is actually expired
+		// Check if subscription is expired due to time
 		if sub.IsExpired() {
 			// Update status in DB
 			updateQuery := `
@@ -370,6 +370,23 @@ func GetActiveUserSubscriptions(userID int64) ([]*models.UserSubscription, error
 			}
 
 			// Skip this subscription as it's expired
+			continue
+		}
+
+		// Also check if remaining uses is zero or less
+		if sub.RemainingUses != nil && *sub.RemainingUses <= 0 {
+			// Update status in DB
+			updateQuery := `
+				UPDATE user_subscriptions
+				SET status = $1, updated_at = $2
+				WHERE id = $3`
+
+			_, err := DB.Exec(updateQuery, models.SubscriptionStatusExpired, time.Now(), sub.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			// Skip this subscription as it has no remaining uses
 			continue
 		}
 
@@ -387,11 +404,12 @@ func GetActiveUserSubscriptions(userID int64) ([]*models.UserSubscription, error
 func RecordSubscriptionUsage(subscriptionID int64, count int) error {
 	// First get the subscription details
 	query := `
-		SELECT id, user_id, plan_id, remaining_uses, uses_count, status
+		SELECT id, user_id, plan_id, remaining_uses, uses_count, status, expiry_date
 		FROM user_subscriptions
 		WHERE id = $1`
 
 	var sub models.UserSubscription
+	var expiryDate sql.NullTime
 	err := DB.QueryRow(query, subscriptionID).Scan(
 		&sub.ID,
 		&sub.UserID,
@@ -399,6 +417,7 @@ func RecordSubscriptionUsage(subscriptionID int64, count int) error {
 		&sub.RemainingUses,
 		&sub.UsesCount,
 		&sub.Status,
+		&expiryDate,
 	)
 
 	if err != nil {
@@ -426,6 +445,36 @@ func RecordSubscriptionUsage(subscriptionID int64, count int) error {
 	_, err = DB.Exec(updateQuery, count, time.Now(), subscriptionID)
 	if err != nil {
 		return err
+	}
+
+	// Check if the subscription should be deactivated after this usage
+	if sub.RemainingUses != nil {
+		newRemainingUses := *sub.RemainingUses - count
+		if newRemainingUses <= 0 {
+			// Remaining uses reached zero, update status to expired
+			deactivateQuery := `
+				UPDATE user_subscriptions
+				SET status = $1, updated_at = $2
+				WHERE id = $3`
+
+			_, err = DB.Exec(deactivateQuery, models.SubscriptionStatusExpired, time.Now(), subscriptionID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Also check if the expiry date has passed
+	if expiryDate.Valid && time.Now().After(expiryDate.Time) {
+		deactivateQuery := `
+			UPDATE user_subscriptions
+			SET status = $1, updated_at = $2
+			WHERE id = $3`
+
+		_, err = DB.Exec(deactivateQuery, models.SubscriptionStatusExpired, time.Now(), subscriptionID)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -518,7 +567,7 @@ func GetCurrentUserSubscription(userID int64) (*models.UserSubscription, error) 
 
 	sub.Plan = &plan
 
-	// Check if subscription is actually expired
+	// Check if subscription is actually expired due to time
 	if sub.IsExpired() {
 		// Update status in DB
 		updateQuery := `
@@ -532,6 +581,23 @@ func GetCurrentUserSubscription(userID int64) (*models.UserSubscription, error) 
 		}
 
 		// Return nil as the subscription is expired
+		return nil, nil
+	}
+
+	// Also check if remaining uses is zero or less
+	if sub.RemainingUses != nil && *sub.RemainingUses <= 0 {
+		// Update status in DB
+		updateQuery := `
+			UPDATE user_subscriptions
+			SET status = $1, updated_at = $2
+			WHERE id = $3`
+
+		_, err := DB.Exec(updateQuery, models.SubscriptionStatusExpired, time.Now(), sub.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Return nil as the subscription has no remaining uses
 		return nil, nil
 	}
 

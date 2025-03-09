@@ -122,11 +122,6 @@ func (s *UserSubscription) IsExpired() bool {
 		return true
 	}
 
-	// Check usage-based expiration
-	if s.RemainingUses != nil && *s.RemainingUses <= 0 {
-		return true
-	}
-
 	return false
 }
 
@@ -136,7 +131,14 @@ func (s *UserSubscription) CheckAndUpdateStatus() bool {
 		return false // Already inactive
 	}
 
+	// Check time-based expiration
 	if s.IsExpired() {
+		s.Status = SubscriptionStatusExpired
+		return true // Status changed
+	}
+
+	// Check usage-based expiration
+	if s.RemainingUses != nil && *s.RemainingUses <= 0 {
 		s.Status = SubscriptionStatusExpired
 		return true // Status changed
 	}

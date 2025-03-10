@@ -1,7 +1,10 @@
 -- Add initial plans with correct pricing
 -- This migration adds the three main subscription plans with their correct prices
 
--- First, check if plans already exist and delete them if they do
+-- First, check if there are any user subscriptions referencing these plans and delete them
+DELETE FROM user_subscriptions WHERE plan_id IN (1, 2, 3);
+
+-- Now we can safely delete the plans
 DELETE FROM plans WHERE id IN (1, 2, 3);
 ALTER SEQUENCE plans_id_seq RESTART WITH 1;
 

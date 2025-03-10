@@ -511,7 +511,7 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	requestData := map[string]interface{}{
 		"model":       "gemini-2.0-flash-thinking-exp-01-21", // Use the most advanced model for image understanding
 		"prompt":      promptText,
-		"max_tokens":  8000,
+		"max_tokens":  2000,
 		"temperature": 0.7,
 	}
 
@@ -538,8 +538,6 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	endpoints := []string{
 		aiURL,
 		"https://api.avalai.ir/v1/chat/completions", // Alternative endpoint
-		"https://api.avalai.ir/chat/completions",
-		"https://api.openai.com/v1/completions",
 	}
 
 	var analysisContent string
@@ -660,6 +658,13 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 		Metadata:    map[string]interface{}{"length": len(analysisContent)},
 	}
 
+	// Before saving the AI response, update the subscription usage
+	// This is a prescription analysis, so we need to decrement the remaining uses
+	if err := h.updateSubscriptionUsage(userID); err != nil {
+		log.Printf("Error updating subscription usage: %v", err)
+		// Continue anyway, don't block the response
+	}
+
 	// Save the AI message to the database
 	aiMessage, err := db.CreateMessage(&aiMsg)
 	if err != nil {
@@ -684,6 +689,28 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	}
 
 	log.Printf("Successfully added AI response for image to chat %d with message ID: %d", chatID, aiMessage.ID)
+}
+
+// Helper method to update subscription usage for prescription analysis
+func (h *ChatHandler) updateSubscriptionUsage(userID int64) error {
+	// Get the active subscription for the user
+	activeSubscription, err := db.GetCurrentUserSubscription(userID)
+	if err != nil {
+		return fmt.Errorf("error getting active subscription: %v", err)
+	}
+
+	if activeSubscription == nil {
+		return fmt.Errorf("no active subscription found")
+	}
+
+	// Record usage (1 prescription)
+	if err := db.RecordSubscriptionUsage(activeSubscription.ID, 1); err != nil {
+		return fmt.Errorf("error recording subscription usage: %v", err)
+	}
+
+	log.Printf("Successfully recorded subscription usage for user %d, subscription %d",
+		userID, activeSubscription.ID)
+	return nil
 }
 
 // UploadImageMessage handles image uploads for chat messages
@@ -895,6 +922,13 @@ func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, use
 		Metadata:    map[string]interface{}{"length": len(analysisContent)},
 	}
 
+	// Before saving the AI response, update the subscription usage
+	// This is a prescription analysis, so we need to decrement the remaining uses
+	if err := h.updateSubscriptionUsage(userID); err != nil {
+		log.Printf("Error updating subscription usage: %v", err)
+		// Continue anyway, don't block the response
+	}
+
 	// Save the AI message to the database
 	aiMessage, err := db.CreateMessage(&aiMsg)
 	if err != nil {
@@ -1033,7 +1067,7 @@ func (h *ChatHandler) tryMultimodalImageAnalysis(apiKey string, imageURL string)
 					},
 				},
 			},
-			MaxTokens:   8000,
+			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
 	)
@@ -1249,7 +1283,7 @@ func (h *ChatHandler) tryTextPromptImageAnalysis(apiKey string, imageURL string)
 					Content: promptText,
 				},
 			},
-			MaxTokens:   8000,
+			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
 	)
@@ -1370,7 +1404,7 @@ func (h *ChatHandler) tryDirectHTTPForImageAnalysis(apiKey string, imageURL stri
 				},
 			},
 		},
-		"max_tokens":  8000,
+		"max_tokens":  2000,
 		"temperature": 0.7,
 	}
 

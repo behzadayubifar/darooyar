@@ -6,7 +6,12 @@ import '../../../core/utils/logger.dart';
 import '../../../core/services/message_migration_service.dart';
 import '../../../core/utils/message_formatter.dart';
 import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/services/subscription_service.dart';
+import '../../auth/providers/auth_providers.dart';
+import '../utils/message_utils.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 final messageListProvider = StateNotifierProvider.family<MessageListNotifier,
     AsyncValue<List<Message>>, String>(
@@ -244,6 +249,9 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           AppLogger.i('Replaced thinking message with actual AI response');
         });
 
+        // Refresh the subscription plan to update the UI
+        _ref.refresh(currentPlanProvider);
+
         return; // No need to poll further
       }
     } catch (e) {
@@ -317,6 +325,10 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           aiResponseReceived = true;
           AppLogger.i(
               'AI response received after ${attempts + 1} polling attempts');
+
+          // Refresh the subscription plan to update the UI
+          _ref.refresh(currentPlanProvider);
+
           break;
         }
 

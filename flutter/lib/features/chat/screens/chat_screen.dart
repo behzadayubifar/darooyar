@@ -7,6 +7,7 @@ import '../../../core/utils/logger.dart';
 import '../../../core/utils/message_formatter.dart';
 import '../../prescription/presentation/widgets/expandable_panel.dart';
 import '../models/chat.dart';
+import '../models/message.dart';
 import '../providers/message_providers.dart';
 import 'dart:io';
 import 'dart:math';
@@ -19,6 +20,7 @@ import 'package:flutter/services.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/message_actions.dart';
 import '../utils/message_utils.dart';
+import '../../subscription/providers/subscription_provider.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -35,6 +37,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _imagePicker = ImagePicker();
   bool _showPrescriptionOptions = false;
   bool _initialScrollDone = false; // متغیر برای کنترل اسکرول اولیه
+  String? _lastProcessedMessageId; // Track the last message ID we processed
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -900,10 +903,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(messageListProvider(widget.chat.id));
+    final currentPlanAsync = ref.watch(currentPlanProvider);
+
+    // Check for new messages and update subscription count if needed
+    messagesAsync.whenData(_checkForNewMessages);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.chat.title),
+        actions: [
+          // Widget to display remaining prescriptions
+          currentPlanAsync.when(
+            data: (plan) {
+              if (plan == null) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: Chip(
+                  label: Text(
+                    '${plan.prescriptionCount} نسخه باقیمانده',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  backgroundColor: AppTheme.primaryColor,
+                  avatar: const Icon(
+                    Icons.medical_services_outlined,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              );
+            },
+            loading: () => const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+              ),
+            ),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -1130,5 +1173,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
+  }
+
+  // Add a method to check for new messages and update the subscription count
+  void _checkForNewMessages(List<Message> messages) {
+    if (messages.isEmpty) return;
+
+    final lastMessage = messages.last;
+
+    // Only process each message once
+    if (lastMessage.id == _lastProcessedMessageId) return;
+
+    // Check if this is a completed AI response
+    if (lastMessage.role == 'assistant' &&
+        !lastMessage.isLoading &&
+        !lastMessage.isThinking) {
+      // Update the last processed message ID
+      _lastProcessedMessageId = lastMessage.id;
+
+      // Refresh the subscription plan to update the UI
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Log for debugging
+        AppLogger.i('Refreshing subscription plan after receiving AI response');
+
+        // Force refresh the subscription plan provider
+        ref.invalidate(currentPlanProvider);
+
+        // Check if the message is a prescription response by looking for specific tags
+        bool isPrescriptionResponse =
+            _isPrescriptionResponse(lastMessage.content);
+        AppLogger.i('Is prescription response: $isPrescriptionResponse');
+
+        if (isPrescriptionResponse) {
+          // Show a snackbar to inform the user that a prescription was used
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('یک نسخه از اشتراک شما استفاده شد'),
+                backgroundColor: AppTheme.primaryColor,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      });
+    }
+  }
+
+  // Helper method to check if a message is a prescription response
+  bool _isPrescriptionResponse(String content) {
+    // Check for prescription-specific tags in the content
+    return content.contains('<داروها>') ||
+        content.contains('تشخیص احتمالی') ||
+        content.contains('تداخلات دارویی') ||
+        content.contains('عوارض دارویی') ||
+        content.contains('زمان مصرف') ||
+        content.contains('نحوه مصرف') ||
+        content.contains('دوز مصرف');
   }
 }

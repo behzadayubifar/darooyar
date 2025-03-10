@@ -115,7 +115,7 @@ func (h *AIHandler) GenerateCompletion(w http.ResponseWriter, r *http.Request) {
 					Content: request.Prompt,
 				},
 			},
-			MaxTokens: 8000,
+			MaxTokens: 2000,
 		},
 	)
 
@@ -221,7 +221,7 @@ func (h *AIHandler) AnalyzePrescriptionWithAI(w http.ResponseWriter, r *http.Req
 				},
 			},
 			// Reduced max tokens to avoid timeouts
-			MaxTokens: 8000,
+			MaxTokens: 2000,
 		},
 	)
 

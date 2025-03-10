@@ -41,4 +41,40 @@ class MessageUtils {
       subject: 'پاسخ دارویار',
     );
   }
+
+  // Helper function to detect prescription messages
+  static bool isPrescriptionMessage(String content, {bool isImage = false}) {
+    // If it's an image, it's always considered a prescription
+    if (isImage) {
+      return true;
+    }
+
+    // Common patterns for prescriptions in Persian and English
+    final prescriptionMarkers = [
+      "نسخه:",
+      "نسخه :",
+      "نسخه ",
+      "prescription:",
+      "prescription ",
+      "rx:",
+      "rx ",
+      "دارو:",
+      "دارو ",
+      "داروی ",
+      "قرص ",
+      "کپسول ",
+      "شربت ",
+      "آمپول ",
+    ];
+
+    final lowerContent = content.toLowerCase();
+
+    for (final marker in prescriptionMarkers) {
+      if (lowerContent.contains(marker.toLowerCase())) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }

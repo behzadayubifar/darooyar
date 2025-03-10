@@ -7,22 +7,13 @@ import 'dart:convert'; // Add this import for json encoding/decoding
 import 'package:http/http.dart' as http; // Add this import for HTTP requests
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
-import '../../../core/utils/message_formatter.dart';
 import '../../prescription/presentation/widgets/expandable_panel.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../providers/message_providers.dart';
-import 'dart:io';
 import 'dart:math';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../core/services/message_migration_service.dart';
-import 'image_viewer_screen.dart';
 import '../widgets/chat_image_widget.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:flutter/services.dart';
 import '../widgets/message_bubble.dart';
-import '../widgets/message_actions.dart';
-import '../utils/message_utils.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 
@@ -40,7 +31,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
   bool _showPrescriptionOptions = false;
-  bool _initialScrollDone = false; // متغیر برای کنترل اسکرول اولیه
   String? _lastProcessedMessageId; // Track the last message ID we processed
   DateTime?
       _lastSubscriptionRefresh; // Track when we last refreshed the subscription
@@ -336,7 +326,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             duration: const Duration(seconds: 2),
             curve: Curves.easeInOut,
           );
-          _initialScrollDone = true;
         }
       });
 
@@ -485,7 +474,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     // پس از به‌روزرسانی موفق اشتراک، در صورت نیاز پیام نمایش بده
-    if (showSnackBar) {
+    if (showSnackBar && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('یک نسخه از اشتراک شما استفاده شد'),
@@ -567,7 +556,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _pickImage(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source) async {
     try {
       final pickedFile = await _imagePicker.pickImage(
         source: source,
@@ -590,6 +579,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           });
 
           AppLogger.e('Error sending image: $error');
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('خطا در ارسال تصویر: ${error.toString()}'),
@@ -604,6 +594,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     } catch (e) {
       AppLogger.e('Error picking image: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('خطا در انتخاب تصویر. لطفا دوباره تلاش کنید.'),
@@ -614,10 +605,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _showPrescriptionOptionsDialog() {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext context) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 20.0),
@@ -645,17 +637,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   // Focus on text field
                   FocusScope.of(context).requestFocus(FocusNode());
                   Future.delayed(const Duration(milliseconds: 100), () {
+                    if (!mounted) return;
                     _messageController.text = 'نسخه: ';
                     FocusScope.of(context).unfocus();
                     Future.delayed(const Duration(milliseconds: 100), () {
+                      if (!mounted) return;
                       FocusScope.of(context).requestFocus(FocusNode());
                     });
                   });
                 },
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
+                leading: const Icon(Icons.photo_camera,
+                    color: AppTheme.primaryColor),
                 title: const Text('عکس از دوربین'),
                 subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
                 onTap: () {
@@ -664,8 +658,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 },
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.photo_library, color: AppTheme.primaryColor),
+                leading: const Icon(Icons.photo_library,
+                    color: AppTheme.primaryColor),
                 title: const Text('انتخاب از گالری'),
                 subtitle: const Text('انتخاب تصویر نسخه از گالری'),
                 onTap: () {
@@ -680,125 +674,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  // Helper method to build expandable panels for AI responses
-  Widget _buildAIResponsePanels(String content) {
-    // Check if the content is empty
-    if (content.isEmpty) {
-      return const Text(
-        'پاسخی دریافت نشد.',
-        style: TextStyle(
-          color: Colors.white,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
-
-    // Remove the initial greeting message that starts with "با کمال میل"
-    if (content.startsWith('با کمال میل') || content.startsWith('با کمال')) {
-      final firstNewlineIndex = content.indexOf('\n\n');
-      if (firstNewlineIndex > 0) {
-        content = content.substring(firstNewlineIndex).trim();
-      }
-    }
-
-    // Remove stars completely instead of replacing them with decorative elements
-    content = content.replaceAll('***', '');
-    content = content.replaceAll('**', '');
-    content = content.replaceAll('*', '');
-    content = content.replaceAll('✧✧✧', '');
-    content = content.replaceAll('✧✧', '');
-    content = content.replaceAll('✧', '');
-
-    // Use the processTaggedContent method to handle all content
-    return _processTaggedContent(content);
-  }
-
-  // Helper method to extract individual medications from a medication list
-  void _extractMedicationItems(
-      String medicationList, List<Map<String, String>> medicationItems) {
-    // Try to extract individual medications
-    // Look for numbered items like "1. دارو" or "۱. دارو" or "- دارو" or "• دارو"
-    final List<String> lines = medicationList.split('\n');
-
-    // Skip the first line if it's a title
-    int startIndex = 0;
-    if (lines.isNotEmpty &&
-        (lines[0].contains('لیست داروها') ||
-            lines[0].contains('داروهای نسخه') ||
-            lines[0].contains('داروهای تجویز شده'))) {
-      startIndex = 1;
-    }
-
-    String currentMedicationName = '';
-    String currentMedicationDetails = '';
-
-    for (int i = startIndex; i < lines.length; i++) {
-      final line = lines[i].trim();
-
-      // Check if this line starts a new medication
-      if (line.isEmpty) continue;
-
-      // Check for numbered items or bullet points
-      bool isNewMedication = RegExp(
-              r'^(\d+\.|\d+\-|۱\.|۲\.|۳\.|۴\.|۵\.|۶\.|۷\.|۸\.|۹\.|۰\.|\-|\•|\*|\✧)')
-          .hasMatch(line);
-
-      // Also check for lines that start with a medication name pattern
-      if (!isNewMedication) {
-        isNewMedication = line.contains('قرص') ||
-            line.contains('کپسول') ||
-            line.contains('شربت') ||
-            line.contains('آمپول') ||
-            line.contains('اسپری') ||
-            line.contains('پماد') ||
-            line.contains('قطره');
-      }
-
-      if (isNewMedication) {
-        // Save previous medication if exists
-        if (currentMedicationName.isNotEmpty) {
-          medicationItems.add({
-            'name': currentMedicationName,
-            'details': currentMedicationDetails.trim()
-          });
-        }
-
-        // Start new medication
-        currentMedicationName = line;
-        currentMedicationDetails = '';
-      } else if (currentMedicationName.isNotEmpty) {
-        // Add to current medication details
-        currentMedicationDetails += line + '\n';
-      }
-    }
-
-    // Add the last medication
-    if (currentMedicationName.isNotEmpty) {
-      medicationItems.add({
-        'name': currentMedicationName,
-        'details': currentMedicationDetails.trim()
-      });
-    }
-
-    // If we couldn't extract any medications but have content, create a single item
-    if (medicationItems.isEmpty && medicationList.isNotEmpty) {
-      String title = 'لیست داروها';
-      String content = medicationList;
-
-      // Try to extract a title
-      if (medicationList.contains(':')) {
-        final parts = medicationList.split(':');
-        if (parts.length > 1 && parts[0].length < 40) {
-          title = parts[0].trim();
-          content = parts.sublist(1).join(':').trim();
-        }
-      }
-
-      medicationItems.add({'name': title, 'details': content});
-    }
-  }
-
-  // Helper method to extract content between tags and create expandable panels
+  // Helper method to process tagged content
   Widget _processTaggedContent(String content) {
     // Define all the tags we want to process
     final List<Map<String, dynamic>> tagDefinitions = [
@@ -859,21 +735,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     content = content.replaceAll('✧✧✧', '');
     content = content.replaceAll('✧✧', '');
     content = content.replaceAll('✧', '');
-
-    // Check if any tags are present in the content (both <tag> and **tag** formats)
-    bool hasAnyTags = false;
-    for (var tagDef in tagDefinitions) {
-      String tag = tagDef['tag'] as String;
-      if (content.contains('<$tag>') && content.contains('</$tag>')) {
-        hasAnyTags = true;
-        break;
-      }
-      // Since we've removed all stars, we need to check for the tag without stars
-      if (content.contains(tag)) {
-        hasAnyTags = true;
-        break;
-      }
-    }
 
     // Calculate the maximum width for the panel
     final double panelWidth = MediaQuery.of(context).size.width * 0.75;
@@ -1075,11 +936,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         } else {
           // Try to find a partial match in specificStyles
           String matchedTitle = '';
-          specificStyles.keys.forEach((key) {
+          for (final key in specificStyles.keys) {
             if (title.contains(key) && key.length > matchedTitle.length) {
               matchedTitle = key;
             }
-          });
+          }
 
           if (matchedTitle.isNotEmpty) {
             style = specificStyles[matchedTitle]!;
@@ -1184,6 +1045,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildErrorMessageContent(String content) {
+    // Clean up the error message to avoid repetition
+    String cleanedContent = content;
+
+    // If the content contains "لطفا دوباره تلاش کنید" multiple times, keep only one instance
+    if (content.contains('لطفا دوباره تلاش کنید')) {
+      final parts = content.split('لطفا دوباره تلاش کنید');
+      if (parts.length > 1) {
+        cleanedContent = parts[0] + 'لطفا دوباره تلاش کنید';
+      }
+    }
+
     return Row(
       children: [
         const Icon(
@@ -1194,8 +1066,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         const SizedBox(width: 8),
         Flexible(
           child: Text(
-            content,
-            style: const TextStyle(color: Colors.white),
+            cleanedContent,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
@@ -1316,7 +1191,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (context, index) {
                       final message = messages[index];
                       final isUser = message.role == 'user';
-                      final isSystem = message.role == 'system';
                       final isImage = message.isImage;
                       final isLoading = message.isLoading;
                       final isError = message.isError;
@@ -1404,14 +1278,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               children: [
                 // نشانگر بارگذاری در حالت پردازش نسخه
                 if (_isPrescriptionProcessing)
-                  Column(
+                  const Column(
                     children: [
-                      const LinearProgressIndicator(
+                      LinearProgressIndicator(
                         backgroundColor: Colors.grey,
                         valueColor: AlwaysStoppedAnimation<Color>(
                             AppTheme.primaryColor),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Text(
                         'در حال پردازش نسخه، لطفاً صبر کنید...',
                         style: TextStyle(
@@ -1420,7 +1294,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                     ],
                   ),
                 Row(
@@ -1511,6 +1385,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     });
                                   }
 
+                                  if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(error.toString()),
@@ -1550,90 +1425,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  // Add a method to check for new messages and update the subscription count
-  void _checkForNewMessages(List<Message> messages) {
-    if (messages.isEmpty) return;
-
-    final lastMessage = messages.last;
-    
-    // اگر پیام جدید در حالت "thinking" یا "loading" است و هنوز وضعیت پردازش نسخه تنظیم نشده
-    if ((lastMessage.isThinking || lastMessage.isLoading) && 
-         lastMessage.role == 'assistant' && 
-         !_isPrescriptionProcessing) {
-      // بررسی کنیم که آیا پیام قبلی از کاربر بوده و حاوی کلمات کلیدی نسخه است
-      if (messages.length >= 2) {
-        final previousMessage = messages[messages.length - 2];
-        if (previousMessage.role == 'user') {
-          bool isPrescription = previousMessage.content.startsWith('نسخه:') || 
-                               previousMessage.content.contains('نسخه') || 
-                               previousMessage.content.contains('دارو') ||
-                               previousMessage.content.contains('قرص') ||
-                               previousMessage.content.contains('کپسول') ||
-                               previousMessage.content.contains('شربت') ||
-                               previousMessage.content.contains('آمپول') ||
-                               previousMessage.isImage; // تصاویر معمولاً نسخه هستند
-                               
-          if (isPrescription) {
-            setState(() {
-              _isPrescriptionProcessing = true;
-            });
-            AppLogger.i('Detected prescription processing from message content');
-          }
-        }
-      }
-    }
-
-    // Only process each message once
-    if (lastMessage.id == _lastProcessedMessageId) return;
-
-    // Check if this is a completed AI response
-    if (lastMessage.role == 'assistant' &&
-        !lastMessage.isLoading &&
-        !lastMessage.isThinking) {
-      // Update the last processed message ID
-      _lastProcessedMessageId = lastMessage.id;
-
-      // Check if the message is a prescription response by looking for specific tags
-      bool isPrescriptionResponse =
-          _isPrescriptionResponse(lastMessage.content);
-      AppLogger.i('Is prescription response: $isPrescriptionResponse');
-
-      // بررسی کنید که آیا در حال پردازش نسخه بوده‌ایم و اکنون پاسخی دریافت کرده‌ایم
-      if (_isPrescriptionProcessing) {
-        // بازنشانی وضعیت پردازش نسخه
-        setState(() {
-          _isPrescriptionProcessing = false;
-        });
-        AppLogger.i('Prescription processing completed, enabling input');
-      }
-
-      if (isPrescriptionResponse) {
-        // Wait a moment to ensure the server has processed the subscription update
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            // Log for debugging
-            AppLogger.i(
-                'Refreshing subscription plan after receiving prescription response');
-
-            // Force refresh the subscription data - just once is enough
-            _forceRefreshSubscriptionWithAPI(showSnackBar: true);
-          }
-        });
-      }
-    } else if (lastMessage.isError && _isPrescriptionProcessing) {
-      // در صورت خطا نیز وضعیت پردازش نسخه را بازنشانی کنید
-      setState(() {
-        _isPrescriptionProcessing = false;
-      });
-      AppLogger.i('Prescription processing failed, enabling input');
-    }
-  }
-
   // Helper method to check if a message is a prescription response
   bool _isPrescriptionResponse(String content) {
     // Log the content for debugging
     AppLogger.i(
         'Checking if message is prescription response. Content length: ${content.length}');
+
+    // First check if this is an error message
+    if (_isErrorResponse(content)) {
+      AppLogger.i(
+          'Message appears to be an error response, not a prescription response');
+      return false;
+    }
 
     // Check for prescription-specific tags in the content
     bool hasPrescriptionTags = content.contains('<داروها>') ||
@@ -1657,5 +1460,192 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     AppLogger.i('Has prescription patterns: $hasPrescriptionPatterns');
 
     return hasPrescriptionTags || hasPrescriptionPatterns;
+  }
+
+  // Helper method to check if a message is an error response from the server
+  bool _isErrorResponse(String content) {
+    // Common error phrases in Persian
+    final errorPhrases = [
+      'عذر میخواهم',
+      'عذر می‌خواهم',
+      'متاسفانه',
+      'متأسفانه',
+      'خطایی رخ داده',
+      'مشکلی پیش آمده',
+      'لطفا دوباره تلاش کنید',
+      'لطفاً دوباره تلاش کنید',
+      'نتوانستم',
+      'قادر به پردازش نیستم',
+      'قادر به تحلیل نیستم',
+      'امکان پردازش وجود ندارد',
+      'امکان تحلیل وجود ندارد',
+      'خطا در پردازش',
+      'خطا در تحلیل',
+      'نمی‌توانم تحلیل کنم',
+      'نمی‌توانم پردازش کنم',
+      'نمی‌توانم تشخیص دهم',
+      'نمی‌توانم بخوانم',
+      'قادر به خواندن نیستم',
+      'تصویر واضح نیست',
+      'تصویر قابل تشخیص نیست',
+      'نسخه قابل خواندن نیست',
+      'نسخه واضح نیست',
+      'خطا در پردازش نسخه',
+    ];
+
+    // Check if the content contains any of the error phrases
+    for (final phrase in errorPhrases) {
+      if (content.contains(phrase)) {
+        AppLogger.i('Detected error phrase in response: "$phrase"');
+        return true;
+      }
+    }
+
+    // Check for common error patterns
+    if ((content.contains('لطفا') || content.contains('لطفاً')) &&
+        (content.contains('دوباره') || content.contains('مجدد'))) {
+      AppLogger.i('Detected error pattern: request to try again');
+      return true;
+    }
+
+    // Check if the content is very short (likely an error)
+    if (content.length < 100 &&
+        (content.contains('خطا') ||
+            content.contains('مشکل') ||
+            content.contains('عذر') ||
+            content.contains('متاسف'))) {
+      AppLogger.i('Detected short error message');
+      return true;
+    }
+
+    // Check if the content lacks prescription-specific information but mentions prescription
+    if (content.contains('نسخه') &&
+        content.length < 200 &&
+        !(content.contains('داروها') ||
+            content.contains('تشخیص') ||
+            content.contains('تداخلات') ||
+            content.contains('عوارض'))) {
+      AppLogger.i(
+          'Detected error response related to prescription without analysis');
+      return true;
+    }
+
+    // Check if the content lacks prescription-specific information
+    bool hasPrescriptionContent = content.contains('دارو') ||
+        content.contains('قرص') ||
+        content.contains('کپسول') ||
+        content.contains('شربت') ||
+        content.contains('آمپول') ||
+        content.contains('تشخیص') ||
+        content.contains('تداخل') ||
+        content.contains('عوارض') ||
+        content.contains('مصرف');
+
+    if (!hasPrescriptionContent && content.length < 200) {
+      AppLogger.i('Detected response without prescription content');
+      return true;
+    }
+
+    return false;
+  }
+
+  // Add a method to check for new messages and update the subscription count
+  void _checkForNewMessages(List<Message> messages) {
+    if (messages.isEmpty) return;
+
+    final lastMessage = messages.last;
+
+    // اگر پیام جدید در حالت "thinking" یا "loading" است و هنوز وضعیت پردازش نسخه تنظیم نشده
+    if ((lastMessage.isThinking || lastMessage.isLoading) &&
+        lastMessage.role == 'assistant' &&
+        !_isPrescriptionProcessing) {
+      // بررسی کنیم که آیا پیام قبلی از کاربر بوده و حاوی کلمات کلیدی نسخه است
+      if (messages.length >= 2) {
+        final previousMessage = messages[messages.length - 2];
+        if (previousMessage.role == 'user') {
+          bool isPrescription = previousMessage.content.startsWith('نسخه:') ||
+              previousMessage.content.contains('نسخه') ||
+              previousMessage.content.contains('دارو') ||
+              previousMessage.content.contains('قرص') ||
+              previousMessage.content.contains('کپسول') ||
+              previousMessage.content.contains('شربت') ||
+              previousMessage.content.contains('آمپول') ||
+              previousMessage.isImage; // تصاویر معمولاً نسخه هستند
+
+          if (isPrescription) {
+            setState(() {
+              _isPrescriptionProcessing = true;
+            });
+            AppLogger.i(
+                'Detected prescription processing from message content');
+          }
+        }
+      }
+    }
+
+    // Only process each message once
+    if (lastMessage.id == _lastProcessedMessageId) return;
+
+    // Check if this is a completed AI response
+    if (lastMessage.role == 'assistant' &&
+        !lastMessage.isLoading &&
+        !lastMessage.isThinking) {
+      // Update the last processed message ID
+      _lastProcessedMessageId = lastMessage.id;
+
+      // Check if the message content indicates an error
+      bool isErrorResponse = _isErrorResponse(lastMessage.content);
+
+      // بررسی کنید که آیا در حال پردازش نسخه بوده‌ایم و اکنون پاسخی دریافت کرده‌ایم
+      if (_isPrescriptionProcessing) {
+        // بازنشانی وضعیت پردازش نسخه
+        setState(() {
+          _isPrescriptionProcessing = false;
+        });
+        AppLogger.i('Prescription processing completed, enabling input');
+
+        // If this is an error response, convert it to an error message
+        if (isErrorResponse) {
+          AppLogger.i('Converting error response to error message');
+
+          // Use the message provider to replace the message with an error message
+          ref
+              .read(messageListProvider(widget.chat.id).notifier)
+              .convertToErrorMessage(lastMessage.id,
+                  'خطا در پردازش نسخه: ${lastMessage.content.split('\n').first}');
+
+          // Don't refresh subscription for error responses
+          return;
+        }
+      }
+
+      // Only check for prescription response if it's not an error
+      if (!isErrorResponse) {
+        // Check if the message is a prescription response by looking for specific tags
+        bool isPrescriptionResponse =
+            _isPrescriptionResponse(lastMessage.content);
+        AppLogger.i('Is prescription response: $isPrescriptionResponse');
+
+        if (isPrescriptionResponse) {
+          // Wait a moment to ensure the server has processed the subscription update
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              // Log for debugging
+              AppLogger.i(
+                  'Refreshing subscription plan after receiving prescription response');
+
+              // Force refresh the subscription data - just once is enough
+              _forceRefreshSubscriptionWithAPI(showSnackBar: true);
+            }
+          });
+        }
+      }
+    } else if (lastMessage.isError && _isPrescriptionProcessing) {
+      // در صورت خطا نیز وضعیت پردازش نسخه را بازنشانی کنید
+      setState(() {
+        _isPrescriptionProcessing = false;
+      });
+      AppLogger.i('Prescription processing failed, enabling input');
+    }
   }
 }

@@ -332,7 +332,7 @@ class MessageActions extends StatelessWidget {
             icon: Icons.refresh_rounded,
             label: 'تلاش مجدد',
             onTap: onRetry!,
-            color: Colors.redAccent,
+            color: Colors.white,
           ),
         ],
       ],

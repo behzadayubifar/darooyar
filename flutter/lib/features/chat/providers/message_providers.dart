@@ -418,6 +418,50 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
     }
   }
 
+  // Method to convert a normal message to an error message
+  void convertToErrorMessage(String messageId, String errorContent) {
+    AppLogger.i('Converting message $messageId to error message');
+
+    // Clean up the error content to avoid repetition
+    String cleanedContent = errorContent;
+
+    // If the content contains "لطفا دوباره تلاش کنید" multiple times, keep only one instance
+    if (errorContent.contains('لطفا دوباره تلاش کنید')) {
+      final parts = errorContent.split('لطفا دوباره تلاش کنید');
+      if (parts.length > 1) {
+        cleanedContent = parts[0] + 'لطفا دوباره تلاش کنید';
+      }
+    }
+
+    state.whenData((messages) {
+      // Find the message with the given ID
+      final index = messages.indexWhere((msg) => msg.id == messageId);
+
+      if (index != -1) {
+        // Create a new error message
+        final errorMessage = Message(
+          id: 'error-${DateTime.now().millisecondsSinceEpoch}',
+          content: cleanedContent,
+          role: 'system',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          contentType: 'error',
+        );
+
+        // Replace the original message with the error message
+        final updatedMessages = List<Message>.from(messages);
+        updatedMessages.removeAt(index);
+        updatedMessages.insert(index, errorMessage);
+
+        state = AsyncValue.data(updatedMessages);
+        AppLogger.i('Successfully converted message to error message');
+      } else {
+        AppLogger.w(
+            'Could not find message with ID $messageId to convert to error');
+      }
+    });
+  }
+
   Future<void> sendImageMessage(String imagePath) async {
     try {
       AppLogger.i('Sending image message from path: $imagePath');

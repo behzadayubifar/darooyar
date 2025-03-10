@@ -50,6 +50,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _lastDirectApiUpdate; // Track the last time we got a direct API update
   bool _ignoreProviderUpdates =
       false; // Flag to ignore provider updates temporarily
+  bool _isPrescriptionProcessing = false; // متغیر برای کنترل وضعیت پردازش نسخه
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -264,6 +265,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+
+    // اطمینان از اینکه وضعیت پردازش نسخه در ابتدا false است
+    _isPrescriptionProcessing = false;
 
     // DEBUGGING: Check for any existing Timers in the app that might be causing refreshes
     AppLogger.i(
@@ -571,9 +575,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
 
       if (pickedFile != null) {
+        // تنظیم وضعیت پردازش نسخه
+        setState(() {
+          _isPrescriptionProcessing = true;
+        });
+
         ref
             .read(messageListProvider(widget.chat.id).notifier)
-            .sendImageMessage(pickedFile.path);
+            .sendImageMessage(pickedFile.path)
+            .catchError((error) {
+          // در صورت خطا، وضعیت پردازش را به روز کن
+          setState(() {
+            _isPrescriptionProcessing = false;
+          });
+
+          AppLogger.e('Error sending image: $error');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطا در ارسال تصویر: ${error.toString()}'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+          return null;
+        });
 
         // اسکرول به پایین پس از ارسال تصویر
         Future.delayed(const Duration(milliseconds: 300), _scrollToBottom);
@@ -594,64 +618,65 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'نوع نسخه را انتخاب کنید',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+      builder: (BuildContext context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'نوع نسخه را انتخاب کنید',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading:
-                  const Icon(Icons.text_fields, color: AppTheme.primaryColor),
-              title: const Text('نسخه متنی'),
-              subtitle: const Text('ارسال نسخه به صورت متن'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _showPrescriptionOptions = false;
-                });
-                // Focus on text field
-                FocusScope.of(context).requestFocus(FocusNode());
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  _messageController.text = 'نسخه: ';
-                  FocusScope.of(context).unfocus();
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    FocusScope.of(context).requestFocus(FocusNode());
+              const SizedBox(height: 20),
+              ListTile(
+                leading:
+                    const Icon(Icons.text_fields, color: AppTheme.primaryColor),
+                title: const Text('نسخه متنی'),
+                subtitle: const Text('ارسال نسخه به صورت متن'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _showPrescriptionOptions = false;
                   });
-                });
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
-              title: const Text('عکس از دوربین'),
-              subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_library, color: AppTheme.primaryColor),
-              title: const Text('انتخاب از گالری'),
-              subtitle: const Text('انتخاب تصویر نسخه از گالری'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-          ],
-        ),
-      ),
+                  // Focus on text field
+                  FocusScope.of(context).requestFocus(FocusNode());
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    _messageController.text = 'نسخه: ';
+                    FocusScope.of(context).unfocus();
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      FocusScope.of(context).requestFocus(FocusNode());
+                    });
+                  });
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
+                title: const Text('عکس از دوربین'),
+                subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.photo_library, color: AppTheme.primaryColor),
+                title: const Text('انتخاب از گالری'),
+                subtitle: const Text('انتخاب تصویر نسخه از گالری'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1375,80 +1400,147 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.medical_services,
-                    color: _showPrescriptionOptions
-                        ? AppTheme.primaryColor
-                        : Colors.grey,
-                  ),
-                  onPressed: _showPrescriptionOptionsDialog,
-                  tooltip: 'ارسال نسخه',
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'پیام خود را بنویسید...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+                // نشانگر بارگذاری در حالت پردازش نسخه
+                if (_isPrescriptionProcessing)
+                  Column(
+                    children: [
+                      const LinearProgressIndicator(
+                        backgroundColor: Colors.grey,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            AppTheme.primaryColor),
                       ),
-                      filled: true,
-                      fillColor:
-                          Theme.of(context).brightness == Brightness.light
-                              ? Colors.grey[100]
-                              : AppTheme.textPrimaryColor,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                      const SizedBox(height: 8),
+                      Text(
+                        'در حال پردازش نسخه، لطفاً صبر کنید...',
+                        style: TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.medical_services,
+                        color: _isPrescriptionProcessing
+                            ? Colors.grey
+                            : (_showPrescriptionOptions
+                                ? AppTheme.primaryColor
+                                : Colors.grey),
+                      ),
+                      onPressed: _isPrescriptionProcessing
+                          ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
+                          : _showPrescriptionOptionsDialog,
+                      tooltip: _isPrescriptionProcessing
+                          ? 'در حال پردازش نسخه...'
+                          : 'ارسال نسخه',
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: _isPrescriptionProcessing
+                              ? 'در حال پردازش نسخه، لطفاً صبر کنید...'
+                              : 'پیام خود را بنویسید...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor:
+                              Theme.of(context).brightness == Brightness.light
+                                  ? Colors.grey[100]
+                                  : AppTheme.textPrimaryColor,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.newline,
+                        keyboardType: TextInputType.multiline,
+                        maxLines: 5,
+                        minLines: 1,
+                        enabled:
+                            !_isPrescriptionProcessing, // غیرفعال کردن فیلد در حالت پردازش نسخه
+                        onSubmitted: (_) {
+                          // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
+                        },
                       ),
                     ),
-                    textInputAction: TextInputAction.newline,
-                    keyboardType: TextInputType.multiline,
-                    maxLines: 5,
-                    minLines: 1,
-                    onSubmitted: (_) {
-                      // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FloatingActionButton(
-                  onPressed: () {
-                    if (_messageController.text.isNotEmpty) {
-                      final messageText = _messageController.text;
-                      _messageController.clear();
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      onPressed: _isPrescriptionProcessing
+                          ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
+                          : () {
+                              if (_messageController.text.isNotEmpty) {
+                                final messageText = _messageController.text;
+                                _messageController.clear();
 
-                      ref
-                          .read(messageListProvider(widget.chat.id).notifier)
-                          .sendMessage(messageText)
-                          .catchError((error) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(error.toString()),
-                            backgroundColor: AppTheme.errorColor,
-                            action: SnackBarAction(
-                              label: 'خرید اشتراک',
-                              onPressed: () {
-                                // Navigate to subscription screen
-                                Navigator.pushNamed(context, '/subscription');
-                              },
-                            ),
-                          ),
-                        );
-                        return null;
-                      });
+                                // بررسی اینکه آیا این پیام یک نسخه است یا نه
+                                bool isPrescription =
+                                    messageText.startsWith('نسخه:') ||
+                                        messageText.contains('نسخه') ||
+                                        messageText.contains('دارو') ||
+                                        messageText.contains('قرص') ||
+                                        messageText.contains('کپسول') ||
+                                        messageText.contains('شربت') ||
+                                        messageText.contains('آمپول');
 
-                      // اسکرول به پایین پس از ارسال پیام
-                      Future.delayed(
-                          const Duration(milliseconds: 300), _scrollToBottom);
-                    }
-                  },
-                  mini: true,
-                  child: const Icon(Icons.send),
+                                // اگر این پیام یک نسخه است، وضعیت پردازش را به روز کن
+                                if (isPrescription) {
+                                  setState(() {
+                                    _isPrescriptionProcessing = true;
+                                  });
+                                }
+
+                                ref
+                                    .read(messageListProvider(widget.chat.id)
+                                        .notifier)
+                                    .sendMessage(messageText)
+                                    .catchError((error) {
+                                  // در صورت خطا، وضعیت پردازش را به روز کن
+                                  if (isPrescription) {
+                                    setState(() {
+                                      _isPrescriptionProcessing = false;
+                                    });
+                                  }
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(error.toString()),
+                                      backgroundColor: AppTheme.errorColor,
+                                      action: SnackBarAction(
+                                        label: 'خرید اشتراک',
+                                        onPressed: () {
+                                          // Navigate to subscription screen
+                                          Navigator.pushNamed(
+                                              context, '/subscription');
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                  return null;
+                                });
+
+                                // اسکرول به پایین پس از ارسال پیام
+                                Future.delayed(
+                                    const Duration(milliseconds: 300),
+                                    _scrollToBottom);
+                              }
+                            },
+                      mini: true,
+                      backgroundColor: _isPrescriptionProcessing
+                          ? Colors.grey
+                          : null, // تغییر رنگ دکمه در حالت پردازش
+                      child: const Icon(Icons.send),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1463,6 +1555,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (messages.isEmpty) return;
 
     final lastMessage = messages.last;
+    
+    // اگر پیام جدید در حالت "thinking" یا "loading" است و هنوز وضعیت پردازش نسخه تنظیم نشده
+    if ((lastMessage.isThinking || lastMessage.isLoading) && 
+         lastMessage.role == 'assistant' && 
+         !_isPrescriptionProcessing) {
+      // بررسی کنیم که آیا پیام قبلی از کاربر بوده و حاوی کلمات کلیدی نسخه است
+      if (messages.length >= 2) {
+        final previousMessage = messages[messages.length - 2];
+        if (previousMessage.role == 'user') {
+          bool isPrescription = previousMessage.content.startsWith('نسخه:') || 
+                               previousMessage.content.contains('نسخه') || 
+                               previousMessage.content.contains('دارو') ||
+                               previousMessage.content.contains('قرص') ||
+                               previousMessage.content.contains('کپسول') ||
+                               previousMessage.content.contains('شربت') ||
+                               previousMessage.content.contains('آمپول') ||
+                               previousMessage.isImage; // تصاویر معمولاً نسخه هستند
+                               
+          if (isPrescription) {
+            setState(() {
+              _isPrescriptionProcessing = true;
+            });
+            AppLogger.i('Detected prescription processing from message content');
+          }
+        }
+      }
+    }
 
     // Only process each message once
     if (lastMessage.id == _lastProcessedMessageId) return;
@@ -1479,6 +1598,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _isPrescriptionResponse(lastMessage.content);
       AppLogger.i('Is prescription response: $isPrescriptionResponse');
 
+      // بررسی کنید که آیا در حال پردازش نسخه بوده‌ایم و اکنون پاسخی دریافت کرده‌ایم
+      if (_isPrescriptionProcessing) {
+        // بازنشانی وضعیت پردازش نسخه
+        setState(() {
+          _isPrescriptionProcessing = false;
+        });
+        AppLogger.i('Prescription processing completed, enabling input');
+      }
+
       if (isPrescriptionResponse) {
         // Wait a moment to ensure the server has processed the subscription update
         Future.delayed(const Duration(seconds: 2), () {
@@ -1492,6 +1620,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           }
         });
       }
+    } else if (lastMessage.isError && _isPrescriptionProcessing) {
+      // در صورت خطا نیز وضعیت پردازش نسخه را بازنشانی کنید
+      setState(() {
+        _isPrescriptionProcessing = false;
+      });
+      AppLogger.i('Prescription processing failed, enabling input');
     }
   }
 

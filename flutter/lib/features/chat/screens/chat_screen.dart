@@ -299,8 +299,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         });
       });
 
-      // First try to get data from direct API
-      _forceRefreshSubscriptionWithAPI();
+      // First try to get data from direct API - بدون نمایش پیام برای بارگذاری اولیه
+      _forceRefreshSubscriptionWithAPI(showSnackBar: false);
 
       // Then try provider as fallback
       ref.read(currentPlanProvider).whenData((plan) {
@@ -336,10 +336,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
       });
 
-      // Refresh subscription data only once when the screen is first shown
+      // Refresh subscription data only once when the screen is first shown - بدون نمایش پیام
       if (mounted) {
         AppLogger.i('Initial refresh of subscription plan');
-        _forceRefreshSubscriptionWithAPI();
+        _forceRefreshSubscriptionWithAPI(showSnackBar: false);
 
         // We're removing the periodic timer to avoid constant API calls
         // The subscription will only be refreshed after specific events like prescription responses
@@ -369,7 +369,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   // Helper method to force refresh subscription data using direct API call
-  Future<void> _forceRefreshSubscriptionWithAPI() async {
+  Future<void> _forceRefreshSubscriptionWithAPI(
+      {bool showSnackBar = false}) async {
     // Don't refresh if we've refreshed recently (within the last 10 seconds)
     final now = DateTime.now();
     if (_lastSubscriptionRefresh != null &&
@@ -478,12 +479,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       AppLogger.e('Error in direct API call: $e');
       _ignoreProviderUpdates = false;
     }
+
+    // پس از به‌روزرسانی موفق اشتراک، در صورت نیاز پیام نمایش بده
+    if (showSnackBar) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('یک نسخه از اشتراک شما استفاده شد'),
+          backgroundColor: AppTheme.primaryColor,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // Helper method to force refresh subscription data
-  void _forceRefreshSubscription() {
-    // Simply call the API method which already has debouncing built in
-    _forceRefreshSubscriptionWithAPI();
+  void _forceRefreshSubscription({bool showSnackBar = false}) {
+    // Force a refresh of the subscription data from the API
+    _forceRefreshSubscriptionWithAPI(showSnackBar: showSnackBar);
   }
 
   // Helper method to directly update the remaining prescriptions count
@@ -1193,16 +1205,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   icon: const Icon(Icons.refresh, size: 20),
                   onPressed: () {
                     AppLogger.i('Manually refreshing subscription plan');
-                    _forceRefreshSubscription();
-
-                    // Show a snackbar to inform the user
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('اطلاعات اشتراک به‌روزرسانی شد'),
-                        backgroundColor: AppTheme.primaryColor,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                    _forceRefreshSubscription(showSnackBar: true);
                   },
                   tooltip: 'به‌روزرسانی اطلاعات اشتراک',
                 ),
@@ -1485,16 +1488,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 'Refreshing subscription plan after receiving prescription response');
 
             // Force refresh the subscription data - just once is enough
-            _forceRefreshSubscriptionWithAPI();
-
-            // Show a snackbar to inform the user that a prescription was used
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('یک نسخه از اشتراک شما استفاده شد'),
-                backgroundColor: AppTheme.primaryColor,
-                duration: Duration(seconds: 3),
-              ),
-            );
+            _forceRefreshSubscriptionWithAPI(showSnackBar: true);
           }
         });
       }

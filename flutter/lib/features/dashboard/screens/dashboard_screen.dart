@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:percent_indicator/percent_indicator.dart';
@@ -64,176 +65,186 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final user = ref.watch(authStateProvider).valueOrNull;
     final currentPlanAsync = ref.watch(currentPlanProvider);
 
-    return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              expandedHeight: 120,
-              floating: true,
-              pinned: true,
-              elevation: 0,
-              backgroundColor: AppTheme.primaryColor,
-              flexibleSpace: FlexibleSpaceBar(
-                title: Text(
-                  'سلام ${user?.firstName ?? 'کاربر'} 👋',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                titlePadding: const EdgeInsets.only(bottom: 16, right: 16),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white),
-                  onPressed: () {
-                    if (user != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SettingsScreen(user: user),
-                        ),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-              ],
-            ),
-          ];
-        },
-        body: RefreshIndicator(
-          onRefresh: () async {
-            ref.refresh(currentPlanProvider);
-            ref.read(authStateProvider.notifier).refreshUser();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Credit Card
-                _buildCreditCard(user),
-
-                // Plan Usage Section
-                _buildPlanUsageSection(currentPlanAsync),
-
-                // Quick Actions
-                _buildQuickActions(context),
-
-                // Tabs
-                Container(
-                  margin: const EdgeInsets.only(top: 16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _showExitConfirmationDialog();
+        }
+        return;
+      },
+      child: Scaffold(
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) {
+            return [
+              SliverAppBar(
+                expandedHeight: 120,
+                floating: true,
+                pinned: true,
+                elevation: 0,
+                automaticallyImplyLeading: false, // Remove back button
+                backgroundColor: AppTheme.primaryColor,
+                flexibleSpace: FlexibleSpaceBar(
+                  title: Text(
+                    'سلام ${user?.firstName ?? 'کاربر'} 👋',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -5),
-                      ),
-                    ],
                   ),
-                  child: Column(
-                    children: [
-                      TabBar(
-                        controller: _tabController,
-                        labelColor: AppTheme.primaryColor,
-                        unselectedLabelColor: Colors.grey,
-                        indicatorSize: TabBarIndicatorSize.label,
-                        tabs: const [
-                          Tab(
-                              text: 'پیشنهادات',
-                              icon: Icon(Icons.lightbulb_outline)),
-                          Tab(text: 'آمار', icon: Icon(Icons.bar_chart)),
-                          Tab(text: 'راهنما', icon: Icon(Icons.help_outline)),
-                        ],
+                  titlePadding: const EdgeInsets.only(bottom: 16, right: 16),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.white),
+                    onPressed: () {
+                      if (user != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsScreen(user: user),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ];
+          },
+          body: RefreshIndicator(
+            onRefresh: () async {
+              ref.refresh(currentPlanProvider);
+              ref.read(authStateProvider.notifier).refreshUser();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Credit Card
+                  _buildCreditCard(user),
+
+                  // Plan Usage Section
+                  _buildPlanUsageSection(currentPlanAsync),
+
+                  // Quick Actions
+                  _buildQuickActions(context),
+
+                  // Tabs
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
                       ),
-                      // Use PageView instead of IndexedStack to enable swiping
-                      SizedBox(
-                        // Set a reasonable height that works for all content
-                        // This is needed because PageView needs a fixed height
-                        height: 350,
-                        child: PageView(
-                          controller: _pageController,
-                          onPageChanged: (index) {
-                            // Sync tab controller with page controller
-                            setState(() {
-                              _currentTabIndex = index;
-                              _tabController.animateTo(index);
-                            });
-                          },
-                          children: [
-                            SingleChildScrollView(
-                              child: _buildSuggestionsTab(),
-                            ),
-                            SingleChildScrollView(
-                              child: _buildStatsTab(),
-                            ),
-                            SingleChildScrollView(
-                              child: _buildHelpTab(),
-                            ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, -5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        TabBar(
+                          controller: _tabController,
+                          labelColor: AppTheme.primaryColor,
+                          unselectedLabelColor: Colors.grey,
+                          indicatorSize: TabBarIndicatorSize.label,
+                          tabs: const [
+                            Tab(
+                                text: 'پیشنهادات',
+                                icon: Icon(Icons.lightbulb_outline)),
+                            Tab(text: 'آمار', icon: Icon(Icons.bar_chart)),
+                            Tab(text: 'راهنما', icon: Icon(Icons.help_outline)),
                           ],
                         ),
-                      ),
-                    ],
+                        // Use PageView instead of IndexedStack to enable swiping
+                        SizedBox(
+                          // Set a reasonable height that works for all content
+                          // This is needed because PageView needs a fixed height
+                          height: 350,
+                          child: PageView(
+                            controller: _pageController,
+                            onPageChanged: (index) {
+                              // Sync tab controller with page controller
+                              setState(() {
+                                _currentTabIndex = index;
+                                _tabController.animateTo(index);
+                              });
+                            },
+                            children: [
+                              SingleChildScrollView(
+                                child: _buildSuggestionsTab(),
+                              ),
+                              SingleChildScrollView(
+                                child: _buildStatsTab(),
+                              ),
+                              SingleChildScrollView(
+                                child: _buildHelpTab(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-              ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == _currentIndex) return;
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            if (index == _currentIndex) return;
 
-          if (index == 0) {
-            // Stay on dashboard
-            setState(() {
-              _currentIndex = 0;
-            });
-          } else if (index == 1) {
-            // Navigate to chat history
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ChatListScreen(),
-              ),
-            ).then((_) {
+            if (index == 0) {
+              // Stay on dashboard
               setState(() {
                 _currentIndex = 0;
               });
-            });
-          } else if (index == 2) {
-            // Start new chat
-            _showNewChatDialog(context);
-            setState(() {
-              _currentIndex = 0;
-            });
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'داشبورد',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'تاریخچه',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            label: 'گفتگوی جدید',
-          ),
-        ],
+            } else if (index == 1) {
+              // Navigate to chat history
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatListScreen(),
+                ),
+              ).then((_) {
+                setState(() {
+                  _currentIndex = 0;
+                });
+              });
+            } else if (index == 2) {
+              // Start new chat
+              _showNewChatDialog(context);
+              setState(() {
+                _currentIndex = 0;
+              });
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard),
+              label: 'داشبورد',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history),
+              label: 'تاریخچه',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.add_circle_outline),
+              label: 'گفتگوی جدید',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1305,6 +1316,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ],
         );
       }),
+    );
+  }
+
+  // Show exit confirmation dialog
+  void _showExitConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'خروج از برنامه',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.primaryColor,
+          ),
+        ),
+        content: const Text(
+          'آیا از خروج از برنامه مطمئن هستید؟',
+          style: TextStyle(fontSize: 16),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey[700],
+            ),
+            child: const Text(
+              'خیر',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Exit the app
+              SystemNavigator.pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'بله',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -38,7 +38,10 @@ class _ChatListScreenWithRefreshState
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Refresh chat list when screen is first shown
+    // مقداردهی اولیه - فقط برای به‌روزرسانی‌های دستی
+    _lastRefreshTime = DateTime.now();
+
+    // Refresh chat list when screen is first shown (فقط یک بار هنگام شروع)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshChatList();
     });
@@ -52,16 +55,20 @@ class _ChatListScreenWithRefreshState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Refresh chat list when app is resumed
-      _refreshChatList();
-    }
+    // هیچ کاری انجام نده - به‌روزرسانی خودکار غیرفعال شد
+    // به‌روزرسانی فقط زمانی انجام می‌شود که کاربر صراحتاً درخواست کند (با pull-to-refresh)
   }
+
+  // متغیرهای مورد نیاز - فقط برای به‌روزرسانی‌های دستی استفاده می‌شود
+  DateTime _lastRefreshTime = DateTime.now();
 
   Future<void> _refreshChatList() async {
     // Check if user is authenticated before refreshing
     final authState = ref.read(authStateProvider);
     if (authState.hasValue && authState.valueOrNull != null) {
+      // به‌روزرسانی زمان آخرین به‌روزرسانی
+      _lastRefreshTime = DateTime.now();
+
       // Show a loading indicator
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

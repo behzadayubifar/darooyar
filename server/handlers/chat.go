@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/darooyar/server/db"
@@ -24,10 +25,16 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-type ChatHandler struct{}
+type ChatHandler struct {
+	// نقشه برای پیگیری وضعیت پردازش پیام‌های نسخه
+	processingChats      map[int64]bool
+	processingChatsMutex sync.Mutex
+}
 
 func NewChatHandler() *ChatHandler {
-	return &ChatHandler{}
+	return &ChatHandler{
+		processingChats: make(map[int64]bool),
+	}
 }
 
 // CreateChat creates a new chat
@@ -194,6 +201,23 @@ func (h *ChatHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// بررسی کنید آیا این چت در حال پردازش است
+	h.processingChatsMutex.Lock()
+	isProcessing := h.processingChats[msgCreate.ChatID]
+	h.processingChatsMutex.Unlock()
+
+	if isProcessing {
+		// اگر چت در حال پردازش است، یک پیام خطا برگردانید
+		response := map[string]interface{}{
+			"status":  "processing",
+			"message": "پیام قبلی شما در حال پردازش است. لطفا صبر کنید.",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	msg, err := db.CreateMessage(&msgCreate)
 	if err != nil {
 		http.Error(w, "Error creating message", http.StatusInternalServerError)
@@ -207,8 +231,21 @@ func (h *ChatHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	// Check if this is a prescription message that needs AI analysis
 	if msgCreate.Role == "user" && isPrescriptionMessage(msgCreate.Content) {
 		log.Printf("Detected prescription message: %s", msgCreate.Content)
+
+		// علامت بزنید که این چت در حال پردازش است
+		h.processingChatsMutex.Lock()
+		h.processingChats[msgCreate.ChatID] = true
+		h.processingChatsMutex.Unlock()
+
 		// Process asynchronously to avoid blocking the response
-		go h.generateAIResponse(msgCreate.ChatID, msgCreate.Content, userID)
+		go func() {
+			h.generateAIResponse(msgCreate.ChatID, msgCreate.Content, userID)
+
+			// پس از اتمام پردازش، علامت را بردارید
+			h.processingChatsMutex.Lock()
+			delete(h.processingChats, msgCreate.ChatID)
+			h.processingChatsMutex.Unlock()
+		}()
 	}
 }
 
@@ -440,6 +477,23 @@ func (h *ChatHandler) CreateChatMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// بررسی کنید آیا این چت در حال پردازش است
+	h.processingChatsMutex.Lock()
+	isProcessing := h.processingChats[chatID]
+	h.processingChatsMutex.Unlock()
+
+	if isProcessing {
+		// اگر چت در حال پردازش است، یک پیام خطا برگردانید
+		response := map[string]interface{}{
+			"status":  "processing",
+			"message": "پیام قبلی شما در حال پردازش است. لطفا صبر کنید.",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	// Create the message
 	msg, err := db.CreateMessage(&msgCreate)
 	if err != nil {
@@ -454,8 +508,21 @@ func (h *ChatHandler) CreateChatMessage(w http.ResponseWriter, r *http.Request) 
 	// Check if this is a prescription message that needs AI analysis
 	if requestBody.Role == "user" && isPrescriptionMessage(requestBody.Content) {
 		log.Printf("Detected prescription message: %s", requestBody.Content)
+
+		// علامت بزنید که این چت در حال پردازش است
+		h.processingChatsMutex.Lock()
+		h.processingChats[chatID] = true
+		h.processingChatsMutex.Unlock()
+
 		// Process asynchronously to avoid blocking the response
-		go h.generateAIResponse(chatID, requestBody.Content, userID)
+		go func() {
+			h.generateAIResponse(chatID, requestBody.Content, userID)
+
+			// پس از اتمام پردازش، علامت را بردارید
+			h.processingChatsMutex.Lock()
+			delete(h.processingChats, chatID)
+			h.processingChatsMutex.Unlock()
+		}()
 	}
 }
 
@@ -463,6 +530,9 @@ func (h *ChatHandler) CreateChatMessage(w http.ResponseWriter, r *http.Request) 
 func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID int64) {
 	// Create a direct HTTP request to the AI analysis endpoint
 	aiURL := "https://api.avalai.ir/v1/completions"
+
+	// ایجاد یک شناسه منحصر به فرد برای این درخواست
+	requestID := fmt.Sprintf("%d-%d", chatID, time.Now().UnixNano())
 
 	// Prepare the AI prompt
 	promptText := fmt.Sprintf(`من مسئول فنی یک داروخانه شهری هستم
@@ -628,6 +698,9 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 		analysisContent = "عذر می‌خواهم، در تحلیل این نسخه خطایی رخ داد. لطفا دوباره تلاش کنید."
 	}
 
+	// اضافه کردن شناسه منحصر به فرد به پاسخ برای جلوگیری از کش شدن در سمت کلاینت
+	analysisContent = fmt.Sprintf("%s\n\n<!-- Response ID: %s -->", analysisContent, requestID)
+
 	// Log the full response for debugging
 	log.Printf("Full AI response content (length: %d):", len(analysisContent))
 
@@ -655,7 +728,7 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 		Role:        "assistant",
 		Content:     analysisContent,
 		ContentType: "text",
-		Metadata:    map[string]interface{}{"length": len(analysisContent)},
+		Metadata:    map[string]interface{}{"length": len(analysisContent), "request_id": requestID},
 	}
 
 	// Before saving the AI response, update the subscription usage
@@ -859,6 +932,9 @@ func (h *ChatHandler) UploadImageMessage(w http.ResponseWriter, r *http.Request)
 func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, userID int64) error {
 	log.Printf("Starting AI analysis for image at URL: %s", imageURL)
 
+	// ایجاد یک شناسه منحصر به فرد برای این درخواست
+	requestID := fmt.Sprintf("%d-%d", chatID, time.Now().UnixNano())
+
 	// Get API key from environment variable
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -892,6 +968,9 @@ func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, use
 		}
 	}
 
+	// اضافه کردن شناسه منحصر به فرد به پاسخ برای جلوگیری از کش شدن در سمت کلاینت
+	analysisContent = fmt.Sprintf("%s\n\n<!-- Response ID: %s -->", analysisContent, requestID)
+
 	// Log the full response for debugging
 	log.Printf("Full AI response content (length: %d):", len(analysisContent))
 
@@ -919,7 +998,7 @@ func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, use
 		Role:        "assistant",
 		Content:     analysisContent,
 		ContentType: "text",
-		Metadata:    map[string]interface{}{"length": len(analysisContent)},
+		Metadata:    map[string]interface{}{"length": len(analysisContent), "request_id": requestID},
 	}
 
 	// Before saving the AI response, update the subscription usage

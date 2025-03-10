@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:async'; // Add this import for Timer
+import 'dart:convert'; // Add this import for json encoding/decoding
+import 'package:http/http.dart' as http; // Add this import for HTTP requests
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/message_formatter.dart';
@@ -21,6 +24,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/message_actions.dart';
 import '../utils/message_utils.dart';
 import '../../subscription/providers/subscription_provider.dart';
+import '../../auth/providers/auth_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -38,6 +42,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showPrescriptionOptions = false;
   bool _initialScrollDone = false; // متغیر برای کنترل اسکرول اولیه
   String? _lastProcessedMessageId; // Track the last message ID we processed
+  DateTime?
+      _lastSubscriptionRefresh; // Track when we last refreshed the subscription
+  int _remainingPrescriptions =
+      0; // متغیر محلی برای نگهداری تعداد نسخه‌های باقیمانده
+  DateTime?
+      _lastDirectApiUpdate; // Track the last time we got a direct API update
+  bool _ignoreProviderUpdates =
+      false; // Flag to ignore provider updates temporarily
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -252,6 +264,63 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+
+    // DEBUGGING: Check for any existing Timers in the app that might be causing refreshes
+    AppLogger.i(
+        'DEBUGGING: Checking for any rogue timers or periodic refreshes');
+
+    // تنظیم مقدار اولیه تعداد نسخه‌های باقیمانده
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // اضافه کردن یک listener برای provider اشتراک
+      ref.listenManual(currentPlanProvider, (previous, next) {
+        // Skip updates if we're ignoring provider updates
+        if (_ignoreProviderUpdates) {
+          AppLogger.i(
+              'Ignoring provider update due to _ignoreProviderUpdates flag');
+          return;
+        }
+
+        next.whenData((plan) {
+          if (plan != null && mounted) {
+            // Only update if we haven't received a direct API value recently
+            if (_lastDirectApiUpdate == null ||
+                DateTime.now().difference(_lastDirectApiUpdate!).inSeconds >
+                    5) {
+              setState(() {
+                _remainingPrescriptions = plan.prescriptionCount;
+              });
+              AppLogger.i(
+                  'Subscription plan listener updated: ${plan.prescriptionCount}');
+            } else {
+              AppLogger.i(
+                  'Ignoring provider update as we have a recent direct API value');
+            }
+          }
+        });
+      });
+
+      // First try to get data from direct API
+      _forceRefreshSubscriptionWithAPI();
+
+      // Then try provider as fallback
+      ref.read(currentPlanProvider).whenData((plan) {
+        if (plan != null && mounted && !_ignoreProviderUpdates) {
+          // Only update if we haven't received a direct API value yet
+          if (_lastDirectApiUpdate == null) {
+            Future.microtask(() {
+              if (mounted) {
+                setState(() {
+                  _remainingPrescriptions = plan.prescriptionCount;
+                });
+                AppLogger.i(
+                    'Initial remaining prescriptions: ${plan.prescriptionCount}');
+              }
+            });
+          }
+        }
+      });
+    });
+
     // اسکرول تأخیری به پایین صفحه
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // ابتدا 1 ثانیه صبر کنید
@@ -266,13 +335,209 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _initialScrollDone = true;
         }
       });
+
+      // Refresh subscription data only once when the screen is first shown
+      if (mounted) {
+        AppLogger.i('Initial refresh of subscription plan');
+        _forceRefreshSubscriptionWithAPI();
+
+        // We're removing the periodic timer to avoid constant API calls
+        // The subscription will only be refreshed after specific events like prescription responses
+      }
     });
+  }
+
+  // Helper method to update UI with the value from API
+  void _updateUIWithAPIValue(int value) {
+    // Only update if the value has changed
+    if (_remainingPrescriptions != value) {
+      // Use setState to update the UI
+      setState(() {
+        _remainingPrescriptions = value;
+      });
+
+      // Force rebuild after a short delay to ensure the UI is updated
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+
+      // Log the update
+      AppLogger.i('UI updated with value from API: $value');
+    }
+  }
+
+  // Helper method to force refresh subscription data using direct API call
+  Future<void> _forceRefreshSubscriptionWithAPI() async {
+    // Don't refresh if we've refreshed recently (within the last 10 seconds)
+    final now = DateTime.now();
+    if (_lastSubscriptionRefresh != null &&
+        now.difference(_lastSubscriptionRefresh!).inSeconds < 10) {
+      AppLogger.i(
+          'Skipping subscription refresh - last refresh was too recent');
+      return;
+    }
+
+    // Update the last refresh timestamp
+    _lastSubscriptionRefresh = now;
+
+    // Add a specific log message to track this API call
+    AppLogger.i(
+        '-----> Direct API refresh of subscription plan from ChatScreen');
+
+    try {
+      // Set flag to ignore provider updates
+      _ignoreProviderUpdates = true;
+
+      // Ensure the flag is reset after a timeout even if there's an error
+      Future.delayed(const Duration(seconds: 5), () {
+        if (_ignoreProviderUpdates) {
+          _ignoreProviderUpdates = false;
+          AppLogger.i('Resumed listening to provider updates (timeout)');
+        }
+      });
+
+      // Get the auth token
+      final authService = ref.read(authServiceProvider);
+      final token = await authService.getToken();
+
+      if (token == null) {
+        AppLogger.e('No token available for subscription refresh');
+        _ignoreProviderUpdates = false;
+        return;
+      }
+
+      // Make a direct API call to get the current subscription
+      final response = await http.get(
+        Uri.parse('https://darooyab.liara.run/api/subscriptions/current'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // Log the raw response for debugging
+        AppLogger.i('Raw API response: ${response.body}');
+
+        // Check for remaining_uses in different possible locations in the response
+        int? remainingUses;
+
+        if (data.containsKey('remaining_uses')) {
+          remainingUses = data['remaining_uses'] as int;
+          AppLogger.i(
+              'Found remaining_uses directly in response: $remainingUses');
+        } else if (data is Map &&
+            data.containsKey('plan') &&
+            data.containsKey('uses_count')) {
+          // If we have plan and uses_count, we can calculate remaining_uses
+          final plan = data['plan'] as Map<String, dynamic>;
+          final usesCount = data['uses_count'] as int;
+
+          if (plan.containsKey('max_uses')) {
+            final maxUses = plan['max_uses'] as int;
+            remainingUses = maxUses - usesCount;
+            AppLogger.i(
+                'Calculated remaining_uses from plan.max_uses and uses_count: $remainingUses');
+          }
+        }
+
+        if (remainingUses != null) {
+          // Use Future.microtask to ensure we're not in the build phase
+          Future.microtask(() {
+            if (mounted) {
+              // Update the UI with the value from the direct API call
+              _updateUIWithAPIValue(remainingUses!);
+              _lastDirectApiUpdate = DateTime.now();
+
+              AppLogger.i(
+                  'Direct API call updated remaining prescriptions: $remainingUses');
+            }
+          });
+
+          // Resume listening to provider updates after a short delay
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              _ignoreProviderUpdates = false;
+              AppLogger.i('Resumed listening to provider updates');
+            }
+          });
+        } else {
+          AppLogger.e(
+              'Could not find or calculate remaining_uses in API response');
+          _ignoreProviderUpdates = false;
+        }
+      } else {
+        AppLogger.e('API error: ${response.statusCode} - ${response.body}');
+        _ignoreProviderUpdates = false;
+      }
+    } catch (e) {
+      AppLogger.e('Error in direct API call: $e');
+      _ignoreProviderUpdates = false;
+    }
+  }
+
+  // Helper method to force refresh subscription data
+  void _forceRefreshSubscription() {
+    // Simply call the API method which already has debouncing built in
+    _forceRefreshSubscriptionWithAPI();
+  }
+
+  // Helper method to directly update the remaining prescriptions count
+  void _updateRemainingPrescriptions() {
+    // Use the future directly to ensure we get the latest data
+    ref.read(currentPlanProvider.future).then((plan) {
+      if (plan != null && mounted && !_ignoreProviderUpdates) {
+        // Only update if the value has changed and we're not in build phase
+        if (_remainingPrescriptions != plan.prescriptionCount) {
+          // Use Future.microtask to ensure we're not in the build phase
+          Future.microtask(() {
+            if (mounted) {
+              setState(() {
+                _remainingPrescriptions = plan.prescriptionCount;
+              });
+              AppLogger.i(
+                  'Direct update of remaining prescriptions: ${plan.prescriptionCount}');
+            }
+          });
+        }
+      }
+    }).catchError((error) {
+      AppLogger.e('Error updating remaining prescriptions: $error');
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // We're disabling automatic refreshes in didChangeDependencies
+    // to prevent frequent API calls
+
+    // Only update the remaining prescriptions count if we're not ignoring provider updates
+    // and we haven't refreshed recently
+    if (!_ignoreProviderUpdates && _lastSubscriptionRefresh != null) {
+      final now = DateTime.now();
+      if (now.difference(_lastSubscriptionRefresh!).inSeconds > 300) {
+        // Only every 5 minutes
+        AppLogger.i('Updating remaining prescriptions count from provider');
+        Future.microtask(() {
+          if (mounted) {
+            _updateRemainingPrescriptions();
+          }
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _ignoreProviderUpdates = false; // Reset the flag
     super.dispose();
   }
 
@@ -903,26 +1168,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(messageListProvider(widget.chat.id));
-    final currentPlanAsync = ref.watch(currentPlanProvider);
 
     // Check for new messages and update subscription count if needed
-    messagesAsync.whenData(_checkForNewMessages);
+    // Use a post-frame callback to avoid calling setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      messagesAsync.whenData(_checkForNewMessages);
+    });
+
+    // Create a unique key for the Chip widget to force rebuild when _remainingPrescriptions changes
+    final chipKey = Key(
+        'prescription_count_${DateTime.now().millisecondsSinceEpoch}_$_remainingPrescriptions');
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.chat.title),
         actions: [
           // Widget to display remaining prescriptions
-          currentPlanAsync.when(
-            data: (plan) {
-              if (plan == null) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(right: 16.0),
-                child: Chip(
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Row(
+              children: [
+                // Refresh button
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  onPressed: () {
+                    AppLogger.i('Manually refreshing subscription plan');
+                    _forceRefreshSubscription();
+
+                    // Show a snackbar to inform the user
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('اطلاعات اشتراک به‌روزرسانی شد'),
+                        backgroundColor: AppTheme.primaryColor,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  tooltip: 'به‌روزرسانی اطلاعات اشتراک',
+                ),
+                // Prescription count chip
+                Chip(
+                  key: chipKey,
                   label: Text(
-                    '${plan.prescriptionCount} نسخه باقیمانده',
+                    '$_remainingPrescriptions نسخه باقیمانده',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -935,16 +1223,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     size: 16,
                   ),
                 ),
-              );
-            },
-            loading: () => const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
+              ],
             ),
-            error: (_, __) => const SizedBox.shrink(),
           ),
         ],
       ),
@@ -1191,22 +1471,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Update the last processed message ID
       _lastProcessedMessageId = lastMessage.id;
 
-      // Refresh the subscription plan to update the UI
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Log for debugging
-        AppLogger.i('Refreshing subscription plan after receiving AI response');
+      // Check if the message is a prescription response by looking for specific tags
+      bool isPrescriptionResponse =
+          _isPrescriptionResponse(lastMessage.content);
+      AppLogger.i('Is prescription response: $isPrescriptionResponse');
 
-        // Force refresh the subscription plan provider
-        ref.invalidate(currentPlanProvider);
-
-        // Check if the message is a prescription response by looking for specific tags
-        bool isPrescriptionResponse =
-            _isPrescriptionResponse(lastMessage.content);
-        AppLogger.i('Is prescription response: $isPrescriptionResponse');
-
-        if (isPrescriptionResponse) {
-          // Show a snackbar to inform the user that a prescription was used
+      if (isPrescriptionResponse) {
+        // Wait a moment to ensure the server has processed the subscription update
+        Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
+            // Log for debugging
+            AppLogger.i(
+                'Refreshing subscription plan after receiving prescription response');
+
+            // Force refresh the subscription data - just once is enough
+            _forceRefreshSubscriptionWithAPI();
+
+            // Show a snackbar to inform the user that a prescription was used
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('یک نسخه از اشتراک شما استفاده شد'),
@@ -1215,20 +1496,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             );
           }
-        }
-      });
+        });
+      }
     }
   }
 
   // Helper method to check if a message is a prescription response
   bool _isPrescriptionResponse(String content) {
+    // Log the content for debugging
+    AppLogger.i(
+        'Checking if message is prescription response. Content length: ${content.length}');
+
     // Check for prescription-specific tags in the content
-    return content.contains('<داروها>') ||
+    bool hasPrescriptionTags = content.contains('<داروها>') ||
+        content.contains('<تشخیص>') ||
         content.contains('تشخیص احتمالی') ||
         content.contains('تداخلات دارویی') ||
         content.contains('عوارض دارویی') ||
         content.contains('زمان مصرف') ||
         content.contains('نحوه مصرف') ||
-        content.contains('دوز مصرف');
+        content.contains('دوز مصرف') ||
+        content.contains('بررسی نسخه');
+
+    AppLogger.i('Has prescription tags: $hasPrescriptionTags');
+
+    // Check for specific patterns that indicate a prescription analysis
+    bool hasPrescriptionPatterns = content.contains('لیست داروها') ||
+        content.contains('لیست کامل داروها') ||
+        content.contains('داروهای تجویز شده') ||
+        content.contains('داروهای نسخه');
+
+    AppLogger.i('Has prescription patterns: $hasPrescriptionPatterns');
+
+    return hasPrescriptionTags || hasPrescriptionPatterns;
   }
 }

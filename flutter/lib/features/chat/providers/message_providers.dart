@@ -249,9 +249,6 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           AppLogger.i('Replaced thinking message with actual AI response');
         });
 
-        // Refresh the subscription plan to update the UI
-        _ref.refresh(currentPlanProvider);
-
         return; // No need to poll further
       }
     } catch (e) {
@@ -325,9 +322,6 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           aiResponseReceived = true;
           AppLogger.i(
               'AI response received after ${attempts + 1} polling attempts');
-
-          // Refresh the subscription plan to update the UI
-          _ref.refresh(currentPlanProvider);
 
           break;
         }

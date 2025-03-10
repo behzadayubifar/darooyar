@@ -610,67 +610,65 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'نوع نسخه را انتخاب کنید',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+      builder: (BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'نوع نسخه را انتخاب کنید',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading:
-                    const Icon(Icons.text_fields, color: AppTheme.primaryColor),
-                title: const Text('نسخه متنی'),
-                subtitle: const Text('ارسال نسخه به صورت متن'),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _showPrescriptionOptions = false;
-                  });
-                  // Focus on text field
-                  FocusScope.of(context).requestFocus(FocusNode());
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading:
+                  const Icon(Icons.text_fields, color: AppTheme.primaryColor),
+              title: const Text('نسخه متنی'),
+              subtitle: const Text('ارسال نسخه به صورت متن'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _showPrescriptionOptions = false;
+                });
+                // Focus on text field
+                FocusScope.of(context).requestFocus(FocusNode());
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  if (!mounted) return;
+                  _messageController.text = 'نسخه: ';
+                  FocusScope.of(context).unfocus();
                   Future.delayed(const Duration(milliseconds: 100), () {
                     if (!mounted) return;
-                    _messageController.text = 'نسخه: ';
-                    FocusScope.of(context).unfocus();
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      if (!mounted) return;
-                      FocusScope.of(context).requestFocus(FocusNode());
-                    });
+                    FocusScope.of(context).requestFocus(FocusNode());
                   });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera,
-                    color: AppTheme.primaryColor),
-                title: const Text('عکس از دوربین'),
-                subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library,
-                    color: AppTheme.primaryColor),
-                title: const Text('انتخاب از گالری'),
-                subtitle: const Text('انتخاب تصویر نسخه از گالری'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-            ],
-          ),
-        );
-      },
+                });
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
+              title: const Text('عکس از دوربین'),
+              subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_library, color: AppTheme.primaryColor),
+              title: const Text('انتخاب از گالری'),
+              subtitle: const Text('انتخاب تصویر نسخه از گالری'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1087,43 +1085,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       messagesAsync.whenData(_checkForNewMessages);
     });
 
-    // Create a unique key for the Chip widget to force rebuild when _remainingPrescriptions changes
-    final chipKey = Key(
-        'prescription_count_${DateTime.now().millisecondsSinceEpoch}_$_remainingPrescriptions');
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.chat.title),
         actions: [
-          // Widget to display remaining prescriptions
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+          // Widget to display remaining prescriptions - more compact version
+          Container(
+            margin: const EdgeInsets.only(right: 8.0),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // Refresh button
                 IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
+                  icon: const Icon(Icons.refresh, size: 18),
                   onPressed: () {
                     AppLogger.i('Manually refreshing subscription plan');
                     _forceRefreshSubscription(showSnackBar: true);
                   },
                   tooltip: 'به‌روزرسانی اطلاعات اشتراک',
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
                 ),
-                // Prescription count chip
-                Chip(
-                  key: chipKey,
-                  label: Text(
-                    '$_remainingPrescriptions نسخه باقیمانده',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                // Compact prescription count indicator
+                Tooltip(
+                  message: '$_remainingPrescriptions نسخه باقیمانده',
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  backgroundColor: AppTheme.primaryColor,
-                  avatar: const Icon(
-                    Icons.medical_services_outlined,
-                    color: Colors.white,
-                    size: 16,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.medical_services_outlined,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$_remainingPrescriptions',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1523,7 +1535,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         content.length < 200 &&
         !(content.contains('داروها') ||
             content.contains('تشخیص') ||
-            content.contains('تداخلات') ||
+            content.contains('تداخل') ||
             content.contains('عوارض'))) {
       AppLogger.i(
           'Detected error response related to prescription without analysis');

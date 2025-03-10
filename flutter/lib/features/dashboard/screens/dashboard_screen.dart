@@ -1197,59 +1197,114 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       extentOffset: chatNameController.text.length,
     );
 
+    // Variable to track loading state
+    bool isLoading = false;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ایجاد گفتگوی جدید'),
-        content: TextField(
-          controller: chatNameController,
-          decoration: const InputDecoration(
-            labelText: 'نام گفتگو',
-            hintText: 'نام گفتگوی جدید را وارد کنید',
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (dialogContext) => StatefulBuilder(builder: (context, setState) {
+        return AlertDialog(
+          title: const Text('ایجاد گفتگوی جدید'),
+          content: TextField(
+            controller: chatNameController,
+            decoration: const InputDecoration(
+              labelText: 'نام گفتگو',
+              hintText: 'نام گفتگوی جدید را وارد کنید',
+            ),
+            autofocus: true,
+            enabled: !isLoading, // Disable text field during loading
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('انصراف'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final chatName = chatNameController.text.trim();
-              if (chatName.isEmpty) {
-                return;
-              }
+          actions: [
+            TextButton(
+              onPressed: isLoading
+                  ? null // Disable button during loading
+                  : () {
+                      Navigator.pop(dialogContext);
+                    },
+              child: const Text('انصراف'),
+            ),
+            ElevatedButton(
+              onPressed: isLoading
+                  ? null // Disable button during loading
+                  : () async {
+                      final chatName = chatNameController.text.trim();
+                      if (chatName.isEmpty) {
+                        return;
+                      }
 
-              Navigator.pop(context);
+                      // Set loading state
+                      setState(() {
+                        isLoading = true;
+                      });
 
-              // Create and navigate to new chat
-              final chatService = ref.read(chatServiceProvider);
-              try {
-                final newChat = await chatService.createChat(chatName);
-                if (newChat != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(chat: newChat),
-                    ),
-                  );
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('خطا در ایجاد گفتگو: $e'),
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              }
-            },
-            child: const Text('ایجاد'),
-          ),
-        ],
-      ),
+                      // Create new chat
+                      final chatService = ref.read(chatServiceProvider);
+                      try {
+                        final newChat = await chatService.createChat(chatName);
+
+                        // Close dialog first
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+
+                        if (newChat != null && context.mounted) {
+                          // Navigate to the chat screen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(chat: newChat),
+                            ),
+                          );
+                        } else if (context.mounted) {
+                          // Show error if chat creation failed
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'خطا در ایجاد گفتگو. لطفا دوباره تلاش کنید.'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        // Reset loading state
+                        if (dialogContext.mounted) {
+                          setState(() {
+                            isLoading = false;
+                          });
+
+                          // Show error in the dialog context
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            SnackBar(
+                              content: Text('خطا در ایجاد گفتگو: $e'),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        } else if (context.mounted) {
+                          // Show error in the parent context if dialog is closed
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('خطا در ایجاد گفتگو: $e'),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('ایجاد'),
+            ),
+          ],
+        );
+      }),
     );
   }
 }

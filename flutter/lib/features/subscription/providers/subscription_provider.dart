@@ -9,6 +9,83 @@ final subscriptionServiceProvider = Provider<SubscriptionService>((ref) {
   return SubscriptionService();
 });
 
+// Subscription state provider
+final subscriptionProvider =
+    StateNotifierProvider<SubscriptionNotifier, SubscriptionState>((ref) {
+  return SubscriptionNotifier(ref);
+});
+
+// Subscription state class
+class SubscriptionState {
+  final SubscriptionPlan? currentPlan;
+  final bool hasActiveSubscription;
+  final int usedMessages;
+
+  SubscriptionState({
+    this.currentPlan,
+    this.hasActiveSubscription = false,
+    this.usedMessages = 0,
+  });
+
+  SubscriptionState copyWith({
+    SubscriptionPlan? currentPlan,
+    bool? hasActiveSubscription,
+    int? usedMessages,
+  }) {
+    return SubscriptionState(
+      currentPlan: currentPlan ?? this.currentPlan,
+      hasActiveSubscription:
+          hasActiveSubscription ?? this.hasActiveSubscription,
+      usedMessages: usedMessages ?? this.usedMessages,
+    );
+  }
+}
+
+// Subscription notifier
+class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
+  final Ref _ref;
+
+  SubscriptionNotifier(this._ref) : super(SubscriptionState()) {
+    _loadCurrentPlan();
+  }
+
+  Future<void> _loadCurrentPlan() async {
+    try {
+      final plan = await _ref.read(currentPlanProvider.future);
+      state = state.copyWith(
+        currentPlan: plan,
+        hasActiveSubscription: plan != null,
+      );
+    } catch (e) {
+      AppLogger.e('Error loading current plan: $e');
+    }
+  }
+
+  Future<void> incrementUsedMessages() async {
+    state = state.copyWith(usedMessages: state.usedMessages + 1);
+
+    // If we have a subscription ID, record the usage
+    if (state.currentPlan != null) {
+      try {
+        final authService = _ref.read(authServiceProvider);
+        final token = await authService.getToken();
+
+        if (token != null) {
+          final subscriptionService = _ref.read(subscriptionServiceProvider);
+          // Implement the actual API call to record usage
+          // This is a placeholder - you'll need to implement the actual API call
+        }
+      } catch (e) {
+        AppLogger.e('Error recording message usage: $e');
+      }
+    }
+  }
+
+  Future<void> refreshSubscription() async {
+    await _loadCurrentPlan();
+  }
+}
+
 // Proveedor para el plan de suscripción actual
 final currentPlanProvider = FutureProvider<SubscriptionPlan?>((ref) async {
   final authState = ref.watch(authStateProvider);
@@ -80,6 +157,9 @@ class PurchaseStateNotifier extends StateNotifier<AsyncValue<void>> {
 
       // Refrescar el plan actual
       _ref.refresh(currentPlanProvider);
+
+      // Refresh the subscription provider
+      _ref.read(subscriptionProvider.notifier).refreshSubscription();
 
       // Refrescar la información del usuario para actualizar el crédito
       _ref.read(authStateProvider.notifier).refreshUser();

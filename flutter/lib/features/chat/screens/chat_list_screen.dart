@@ -10,9 +10,6 @@ import 'chat_screen.dart';
 import 'folder_list_screen.dart';
 import '../../auth/providers/auth_providers.dart';
 
-// Create a RouteObserver for the chat list screen
-final chatListRouteObserver = RouteObserver<PageRoute>();
-
 // This is the original ConsumerWidget version that is referenced in main.dart
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({Key? key}) : super(key: key);
@@ -35,10 +32,7 @@ class ChatListScreenWithRefresh extends ConsumerStatefulWidget {
 
 class _ChatListScreenWithRefreshState
     extends ConsumerState<ChatListScreenWithRefresh>
-    with WidgetsBindingObserver, RouteAware {
-  // Add a variable to track if we've navigated away
-  bool _wasInactive = false;
-
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -54,54 +48,15 @@ class _ChatListScreenWithRefreshState
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Subscribe to route changes
-    chatListRouteObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
-
-    // This will be called when returning to this screen from another screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Check if we need to refresh (if we've been away for a while)
-      final now = DateTime.now();
-      if (now.difference(_lastRefreshTime).inSeconds > 2) {
-        // Only refresh if it's been more than 2 seconds since the last refresh
-        _refreshChatList();
-      }
-    });
-  }
-
-  @override
   void dispose() {
-    chatListRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // Called when the current route has been pushed.
   @override
-  void didPush() {
-    // Route was pushed onto navigator and is now topmost route.
-    _refreshChatList();
-  }
-
-  // Called when the current route has been popped off.
-  @override
-  void didPop() {
-    // Route was popped off the navigator.
-  }
-
-  // Called when a new route has been pushed, and the current route is no longer visible.
-  @override
-  void didPushNext() {
-    // Route is no longer visible.
-  }
-
-  // Called when the top route has been popped off, and the current route shows up.
-  @override
-  void didPopNext() {
-    // Route is visible again.
-    // We need to refresh the chat list when returning to this screen
-    _refreshChatList();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // هیچ کاری انجام نده - به‌روزرسانی خودکار غیرفعال شد
+    // به‌روزرسانی فقط زمانی انجام می‌شود که کاربر صراحتاً درخواست کند (با pull-to-refresh)
   }
 
   // متغیرهای مورد نیاز - فقط برای به‌روزرسانی‌های دستی استفاده می‌شود
@@ -114,35 +69,35 @@ class _ChatListScreenWithRefreshState
       // به‌روزرسانی زمان آخرین به‌روزرسانی
       _lastRefreshTime = DateTime.now();
 
-      // Log the refresh attempt
-      AppLogger.i('Refreshing chat list');
+      // Show a loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('در حال بارگذاری گفتگوها...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
 
-      try {
-        await ref.read(chatListProvider.notifier).loadChats();
+      await ref.read(chatListProvider.notifier).loadChats();
 
-        // Only show error messages, not success messages
-        if (mounted) {
-          // Check the state to see if there was an error
-          final state = ref.read(chatListProvider);
-          if (state is AsyncError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content:
-                    Text('خطا در بارگذاری گفتگوها. لطفاً دوباره تلاش کنید.'),
-                backgroundColor: AppTheme.errorColor,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        // Show error message if there was an exception
-        if (mounted) {
+      // Provide feedback on completion
+      if (mounted) {
+        // Check the state to see if there was an error
+        final state = ref.read(chatListProvider);
+        if (state is AsyncError) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('خطا در بارگذاری گفتگوها: ${e.toString()}'),
+            const SnackBar(
+              content: Text('خطا در بارگذاری گفتگوها. لطفاً دوباره تلاش کنید.'),
               backgroundColor: AppTheme.errorColor,
-              duration: const Duration(seconds: 3),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('گفتگوها با موفقیت بارگذاری شدند.'),
+              duration: Duration(seconds: 1),
             ),
           );
         }
@@ -338,20 +293,14 @@ class _ChatListScreenWithRefreshState
                         ),
                       ],
                     ),
-                    onTap: () async {
+                    onTap: () {
                       ref.read(selectedChatProvider.notifier).state = chat;
-                      // Navigate to the chat screen and wait for it to complete
-                      await Navigator.push(
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ChatScreen(chat: chat),
                         ),
                       );
-
-                      // When we return from the chat screen, refresh the chat list
-                      if (mounted) {
-                        _refreshChatList();
-                      }
                     },
                   ),
                 );

@@ -41,6 +41,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _ignoreProviderUpdates =
       false; // Flag to ignore provider updates temporarily
   bool _isPrescriptionProcessing = false; // متغیر برای کنترل وضعیت پردازش نسخه
+  bool _isLoading = false;
+  bool _isRefreshing = false; // Track when refresh is in progress
+  final FocusNode _focusNode = FocusNode();
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -370,6 +373,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         now.difference(_lastSubscriptionRefresh!).inSeconds < 10) {
       AppLogger.i(
           'Skipping subscription refresh - last refresh was too recent');
+      // Reset the refreshing flag if we're skipping
+      if (_isRefreshing) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
       return;
     }
 
@@ -390,6 +399,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _ignoreProviderUpdates = false;
           AppLogger.i('Resumed listening to provider updates (timeout)');
         }
+        // Also reset the refreshing flag after timeout
+        if (_isRefreshing && mounted) {
+          setState(() {
+            _isRefreshing = false;
+          });
+        }
       });
 
       // Get the auth token
@@ -399,6 +414,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (token == null) {
         AppLogger.e('No token available for subscription refresh');
         _ignoreProviderUpdates = false;
+        // Reset the refreshing flag
+        if (_isRefreshing && mounted) {
+          setState(() {
+            _isRefreshing = false;
+          });
+        }
         return;
       }
 
@@ -457,31 +478,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             if (mounted) {
               _ignoreProviderUpdates = false;
               AppLogger.i('Resumed listening to provider updates');
+              // Reset the refreshing flag
+              if (_isRefreshing) {
+                setState(() {
+                  _isRefreshing = false;
+                });
+              }
             }
           });
         } else {
           AppLogger.e(
               'Could not find or calculate remaining_uses in API response');
           _ignoreProviderUpdates = false;
+          // Reset the refreshing flag
+          if (_isRefreshing && mounted) {
+            setState(() {
+              _isRefreshing = false;
+            });
+          }
         }
       } else {
         AppLogger.e('API error: ${response.statusCode} - ${response.body}');
         _ignoreProviderUpdates = false;
+        // Reset the refreshing flag
+        if (_isRefreshing && mounted) {
+          setState(() {
+            _isRefreshing = false;
+          });
+        }
       }
     } catch (e) {
       AppLogger.e('Error in direct API call: $e');
       _ignoreProviderUpdates = false;
-    }
-
-    // پس از به‌روزرسانی موفق اشتراک، در صورت نیاز پیام نمایش بده
-    if (showSnackBar && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('یک نسخه از اشتراک شما استفاده شد'),
-          backgroundColor: AppTheme.primaryColor,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      // Reset the refreshing flag
+      if (_isRefreshing && mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -1097,11 +1131,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               children: [
                 // Refresh button
                 IconButton(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  onPressed: () {
-                    AppLogger.i('Manually refreshing subscription plan');
-                    _forceRefreshSubscription(showSnackBar: false);
-                  },
+                  icon: _isRefreshing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.refresh, size: 18),
+                  onPressed: _isRefreshing
+                      ? null
+                      : () {
+                          setState(() {
+                            _isRefreshing = true;
+                          });
+                          AppLogger.i('Manually refreshing subscription plan');
+                          _forceRefreshSubscription(showSnackBar: false);
+                        },
                   tooltip: 'به‌روزرسانی اطلاعات اشتراک',
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
@@ -1647,7 +1696,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   'Refreshing subscription plan after receiving prescription response');
 
               // Force refresh the subscription data - just once is enough
-              _forceRefreshSubscriptionWithAPI(showSnackBar: true);
+              _forceRefreshSubscriptionWithAPI(showSnackBar: false);
             }
           });
         }

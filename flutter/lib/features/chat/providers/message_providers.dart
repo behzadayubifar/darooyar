@@ -419,7 +419,7 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
   }
 
   // Method to convert a normal message to an error message
-  void convertToErrorMessage(String messageId, String errorContent) {
+  void convertToErrorMessage(String messageId, String errorContent) async {
     AppLogger.i('Converting message $messageId to error message');
 
     // Clean up the error content to avoid repetition
@@ -433,11 +433,14 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
       }
     }
 
-    state.whenData((messages) {
+    state.whenData((messages) async {
       // Find the message with the given ID
       final index = messages.indexWhere((msg) => msg.id == messageId);
 
       if (index != -1) {
+        // Get the original message
+        final originalMessage = messages[index];
+
         // Create a new error message
         final errorMessage = Message(
           id: 'error-${DateTime.now().millisecondsSinceEpoch}',
@@ -448,13 +451,33 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           contentType: 'error',
         );
 
-        // Replace the original message with the error message
+        // Replace the original message with the error message in the state
         final updatedMessages = List<Message>.from(messages);
         updatedMessages.removeAt(index);
         updatedMessages.insert(index, errorMessage);
 
         state = AsyncValue.data(updatedMessages);
-        AppLogger.i('Successfully converted message to error message');
+        AppLogger.i(
+            'Successfully converted message to error message in memory');
+
+        // Now create a new message in the database with the error content
+        try {
+          // Delete the original message if possible
+          // This is optional and depends on your API capabilities
+
+          // Create a new message with error content type
+          await _chatService.createMessage(
+            _chatId,
+            cleanedContent,
+            'system', // Use system role for error messages
+            contentType: 'error', // Mark as error type
+          );
+
+          AppLogger.i('Successfully created error message in database');
+        } catch (e) {
+          AppLogger.e('Error creating error message in database: $e');
+          // Even if the database update fails, we've already updated the UI
+        }
       } else {
         AppLogger.w(
             'Could not find message with ID $messageId to convert to error');

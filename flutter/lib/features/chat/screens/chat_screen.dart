@@ -41,9 +41,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _ignoreProviderUpdates =
       false; // Flag to ignore provider updates temporarily
   bool _isPrescriptionProcessing = false; // متغیر برای کنترل وضعیت پردازش نسخه
-  bool _isLoading = false;
   bool _isRefreshing = false; // Track when refresh is in progress
-  final FocusNode _focusNode = FocusNode();
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -638,71 +636,79 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  // Show options for prescription input
   void _showPrescriptionOptionsDialog() {
     showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'نوع نسخه را انتخاب کنید',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20.0),
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'نوع نسخه را انتخاب کنید',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading:
-                  const Icon(Icons.text_fields, color: AppTheme.primaryColor),
-              title: const Text('نسخه متنی'),
-              subtitle: const Text('ارسال نسخه به صورت متن'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _showPrescriptionOptions = false;
-                });
-                // Focus on text field
-                FocusScope.of(context).requestFocus(FocusNode());
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  if (!mounted) return;
-                  _messageController.text = 'نسخه: ';
-                  FocusScope.of(context).unfocus();
+              const SizedBox(height: 20),
+              ListTile(
+                leading:
+                    const Icon(Icons.text_fields, color: AppTheme.primaryColor),
+                title: const Text('نسخه متنی'),
+                subtitle: const Text('ارسال نسخه به صورت متن'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _showPrescriptionOptions = false;
+                  });
+                  if (mounted) {
+                    FocusScope.of(context).requestFocus(FocusNode());
+                  }
                   Future.delayed(const Duration(milliseconds: 100), () {
                     if (!mounted) return;
-                    FocusScope.of(context).requestFocus(FocusNode());
+                    _messageController.text = 'نسخه: ';
+                    if (mounted) {
+                      FocusScope.of(context).unfocus();
+                    }
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      if (!mounted) return;
+                      if (mounted) {
+                        FocusScope.of(context).requestFocus(FocusNode());
+                      }
+                    });
                   });
-                });
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_camera, color: AppTheme.primaryColor),
-              title: const Text('عکس از دوربین'),
-              subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_library, color: AppTheme.primaryColor),
-              title: const Text('انتخاب از گالری'),
-              subtitle: const Text('انتخاب تصویر نسخه از گالری'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-          ],
-        ),
-      ),
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera,
+                    color: AppTheme.primaryColor),
+                title: const Text('عکس از دوربین'),
+                subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library,
+                    color: AppTheme.primaryColor),
+                title: const Text('انتخاب از گالری'),
+                subtitle: const Text('انتخاب تصویر نسخه از گالری'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1008,7 +1014,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildMessageContent(
       String content, bool isImage, bool isLoading, bool isThinking,
-      {bool isUser = false}) {
+      {bool isUser = false, bool isError = false}) {
     if (isImage) {
       return ChatImageWidget(content: content);
     }
@@ -1043,6 +1049,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     }
 
+    // If this is an error message, use the error message builder
+    if (isError) {
+      return _buildErrorMessageContent(content);
+    }
+
     // Process content with tags (both <tag> and **tag** formats)
     // First remove all stars from the content
     content = content.replaceAll('***', '');
@@ -1069,6 +1080,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (firstNewlineIndex > 0) {
         content = content.substring(firstNewlineIndex).trim();
       }
+    }
+
+    // Check if this is an error response that wasn't properly marked as an error
+    if (_isErrorResponse(content)) {
+      return _buildErrorMessageContent(content);
     }
 
     // For AI messages, use the processTaggedContent function for all content
@@ -1268,7 +1284,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ? _buildErrorMessageContent(message.content)
                             : _buildMessageContent(
                                 message.content, isImage, isLoading, isThinking,
-                                isUser: isUser),
+                                isUser: isUser, isError: isError),
                         onRetry: isError
                             ? () {
                                 // Retry sending the failed message
@@ -1676,6 +1692,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   'خطا در پردازش نسخه: ${lastMessage.content.split('\n').first}');
 
           // Don't refresh subscription for error responses
+          return;
+        }
+      } else {
+        // Even if we're not processing a prescription, check if this is an error response
+        // that needs to be converted to an error message
+        if (isErrorResponse && !lastMessage.isError) {
+          AppLogger.i(
+              'Converting non-prescription error response to error message');
+
+          // Use the message provider to replace the message with an error message
+          ref
+              .read(messageListProvider(widget.chat.id).notifier)
+              .convertToErrorMessage(lastMessage.id,
+                  'خطا: ${lastMessage.content.split('\n').first}');
+
           return;
         }
       }

@@ -12,7 +12,8 @@ import 'features/prescription/presentation/screens/splash_screen.dart';
 import 'features/auth/providers/auth_providers.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/register_screen.dart';
-import 'features/chat/screens/chat_list_screen.dart';
+import 'features/chat/screens/chat_list_screen.dart'
+    show ChatListScreen, chatListRouteObserver;
 import 'features/settings/screens/settings_screen.dart';
 import 'features/chat/services/chat_service.dart';
 import 'features/subscription/screens/subscription_screen.dart';
@@ -198,6 +199,9 @@ class MyApp extends ConsumerWidget {
           ),
         );
       },
+      navigatorObservers: [
+        chatListRouteObserver,
+      ],
     );
   }
 }

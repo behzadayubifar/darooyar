@@ -1100,7 +1100,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   icon: const Icon(Icons.refresh, size: 18),
                   onPressed: () {
                     AppLogger.i('Manually refreshing subscription plan');
-                    _forceRefreshSubscription(showSnackBar: true);
+                    _forceRefreshSubscription(showSnackBar: false);
                   },
                   tooltip: 'به‌روزرسانی اطلاعات اشتراک',
                   padding: const EdgeInsets.all(4),

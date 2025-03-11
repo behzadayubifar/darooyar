@@ -696,6 +696,13 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 	if !responseReceived || analysisContent == "" {
 		log.Printf("All AI service endpoints failed to provide analysis")
 		analysisContent = "عذر می‌خواهم، در تحلیل این نسخه خطایی رخ داد. لطفا دوباره تلاش کنید."
+	} else {
+		// Only update subscription usage if we got a successful response
+		// This is a prescription analysis, so we need to decrement the remaining uses
+		if err := h.updateSubscriptionUsage(userID); err != nil {
+			log.Printf("Error updating subscription usage: %v", err)
+			// Continue anyway, don't block the response
+		}
 	}
 
 	// اضافه کردن شناسه منحصر به فرد به پاسخ برای جلوگیری از کش شدن در سمت کلاینت
@@ -729,13 +736,6 @@ func (h *ChatHandler) generateAIResponse(chatID int64, content string, userID in
 		Content:     analysisContent,
 		ContentType: "text",
 		Metadata:    map[string]interface{}{"length": len(analysisContent), "request_id": requestID},
-	}
-
-	// Before saving the AI response, update the subscription usage
-	// This is a prescription analysis, so we need to decrement the remaining uses
-	if err := h.updateSubscriptionUsage(userID); err != nil {
-		log.Printf("Error updating subscription usage: %v", err)
-		// Continue anyway, don't block the response
 	}
 
 	// Save the AI message to the database
@@ -945,27 +945,50 @@ func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, use
 	// Try different approaches for image analysis in order of preference
 	var analysisContent string
 	var err error
+	var aiSuccessful bool = false
 
 	// First try with openai client and multimodal approach
 	log.Println("Attempting to analyze image with Gemini multimodal approach")
 	analysisContent, err = h.tryMultimodalImageAnalysis(apiKey, imageURL)
+	if err == nil && analysisContent != "" {
+		aiSuccessful = true
+	}
 
 	// If that fails, fall back to text prompt approach
 	if err != nil || analysisContent == "" {
 		log.Printf("Multimodal approach failed: %v. Trying with text prompt approach", err)
 		analysisContent, err = h.tryTextPromptImageAnalysis(apiKey, imageURL)
+		if err == nil && analysisContent != "" {
+			aiSuccessful = true
+		}
 
 		// If that also fails, try direct HTTP approach as final fallback
 		if err != nil || analysisContent == "" {
 			log.Printf("Text prompt approach failed: %v. Trying direct HTTP approach", err)
 			analysisContent, err = h.tryDirectHTTPForImageAnalysis(apiKey, imageURL)
+			if err == nil && analysisContent != "" {
+				aiSuccessful = true
+			}
 
 			// If all approaches fail, provide a fallback error message
 			if err != nil || analysisContent == "" {
 				log.Printf("All image analysis approaches failed: %v", err)
 				analysisContent = "عذر می‌خواهم، در تحلیل این نسخه تصویری خطایی رخ داد. لطفا دوباره تلاش کنید یا نسخه را به صورت متنی وارد کنید."
+				aiSuccessful = false
 			}
 		}
+	}
+
+	// Only update subscription usage if we got a successful response
+	if aiSuccessful {
+		if err := h.updateSubscriptionUsage(userID); err != nil {
+			log.Printf("Error updating subscription usage: %v", err)
+			// Continue anyway, don't block the response
+		} else {
+			log.Printf("Successfully updated subscription usage for user %d", userID)
+		}
+	} else {
+		log.Printf("Not updating subscription usage due to AI service failure")
 	}
 
 	// اضافه کردن شناسه منحصر به فرد به پاسخ برای جلوگیری از کش شدن در سمت کلاینت
@@ -999,13 +1022,6 @@ func (h *ChatHandler) generateImageAIResponse(chatID int64, imageURL string, use
 		Content:     analysisContent,
 		ContentType: "text",
 		Metadata:    map[string]interface{}{"length": len(analysisContent), "request_id": requestID},
-	}
-
-	// Before saving the AI response, update the subscription usage
-	// This is a prescription analysis, so we need to decrement the remaining uses
-	if err := h.updateSubscriptionUsage(userID); err != nil {
-		log.Printf("Error updating subscription usage: %v", err)
-		// Continue anyway, don't block the response
 	}
 
 	// Save the AI message to the database

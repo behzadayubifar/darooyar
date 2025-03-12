@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async'; // Add this import for Timer
 import 'dart:convert'; // Add this import for json encoding/decoding
+import 'dart:io'; // Add this import for File
 import 'package:http/http.dart' as http; // Add this import for HTTP requests
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/logger.dart';
@@ -16,6 +17,9 @@ import '../widgets/chat_image_widget.dart';
 import '../widgets/message_bubble.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../auth/providers/auth_providers.dart';
+import 'image_viewer_screen.dart';
+
+// Use the CollapseAllPanelsNotification from expandable_panel.dart
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -26,11 +30,12 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+// Add TickerProviderStateMixin to support animation controllers
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with TickerProviderStateMixin {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
-  bool _showPrescriptionOptions = false;
   String? _lastProcessedMessageId; // Track the last message ID we processed
   DateTime?
       _lastSubscriptionRefresh; // Track when we last refreshed the subscription
@@ -42,6 +47,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       false; // Flag to ignore provider updates temporarily
   bool _isPrescriptionProcessing = false; // متغیر برای کنترل وضعیت پردازش نسخه
   bool _isRefreshing = false; // Track when refresh is in progress
+
+  // New variables for prescription submission flow
+  bool _prescriptionModeActive = false;
+  String _selectedPrescriptionType = '';
+  // Add a new variable to control the input field visibility
+  bool _showInputField = false;
+  // Animation controller for input field expansion
+  late AnimationController _inputExpandController;
+  late Animation<double> _inputWidthAnimation;
+
+  // متغیر جدید برای نگهداری مسیر تصویر انتخاب شده
+  String? _selectedImagePath;
+  // متغیر برای نشان دادن وضعیت انتخاب تصویر
+  bool _hasSelectedImage = false;
+
+  // Prescription submission types
+  final List<Map<String, dynamic>> _prescriptionTypes = [
+    {
+      'id': 'text',
+      'title': 'نسخه متنی',
+      'icon': Icons.text_fields,
+      'color': Colors.blue,
+      'description': 'ارسال نسخه به صورت متنی',
+      'placeholder': 'نسخه: '
+    },
+    {
+      'id': 'image',
+      'title': 'انتخاب از گالری',
+      'icon': Icons.photo_library,
+      'color': Colors.green,
+      'description': 'ارسال تصویر نسخه از گالری',
+      'placeholder': ''
+    },
+    {
+      'id': 'camera',
+      'title': 'عکس با دوربین',
+      'icon': Icons.camera_alt,
+      'color': Colors.purple,
+      'description': 'گرفتن عکس از نسخه با دوربین',
+      'placeholder': ''
+    },
+  ];
 
   // Define a list of colors and icons for the panels
   final List<Map<String, dynamic>> sectionStyles = [
@@ -72,6 +119,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'color': Colors.blue.shade700,
       'icon': Icons.info_outline
     },
+    '1. تشخیص احتمالی': {
+      'color': Colors.blue.shade700,
+      'icon': Icons.info_outline
+    },
+    '1. پیشگیری یا درمان کمبود': {
+      'color': Colors.green.shade700,
+      'icon': Icons.healing_outlined
+    },
+    'پیشگیری یا درمان کمبود': {
+      'color': Colors.green.shade700,
+      'icon': Icons.healing_outlined
+    },
     'تشخیص': {'color': Colors.blue.shade700, 'icon': Icons.info_outline},
     'تداخلات': {'color': Colors.red.shade700, 'icon': Icons.warning_outlined},
     'تداخلات مهم': {
@@ -83,6 +142,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'icon': Icons.warning_outlined
     },
     '۲. تداخلات مهم': {
+      'color': Colors.red.shade700,
+      'icon': Icons.warning_outlined
+    },
+    '2. تداخلات مهم': {
       'color': Colors.red.shade700,
       'icon': Icons.warning_outlined
     },
@@ -253,12 +316,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     },
   };
 
+  // Add a new state variable to track if any panel is expanded
+  bool _isAnyPanelExpanded = false;
+
   @override
   void initState() {
     super.initState();
 
     // اطمینان از اینکه وضعیت پردازش نسخه در ابتدا false است
     _isPrescriptionProcessing = false;
+
+    // Initialize animation controller for input field expansion
+    _inputExpandController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _inputWidthAnimation = Tween<double>(
+      begin: 2, // Start with a very narrow width
+      end: 1, // End with full width
+    ).animate(CurvedAnimation(
+      parent: _inputExpandController,
+      curve: Curves.easeOutCubic,
+    ));
 
     // DEBUGGING: Check for any existing Timers in the app that might be causing refreshes
     AppLogger.i(
@@ -574,6 +654,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _inputExpandController.dispose(); // Dispose the animation controller
     _ignoreProviderUpdates = false; // Reset the flag
     super.dispose();
   }
@@ -588,128 +669,319 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final pickedFile = await _imagePicker.pickImage(
-        source: source,
-        imageQuality: 70,
-      );
-
-      if (pickedFile != null) {
-        // تنظیم وضعیت پردازش نسخه
-        setState(() {
-          _isPrescriptionProcessing = true;
-        });
-
-        ref
-            .read(messageListProvider(widget.chat.id).notifier)
-            .sendImageMessage(pickedFile.path)
-            .catchError((error) {
-          // در صورت خطا، وضعیت پردازش را به روز کن
-          setState(() {
-            _isPrescriptionProcessing = false;
-          });
-
-          AppLogger.e('Error sending image: $error');
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('خطا در ارسال تصویر: ${error.toString()}'),
-              backgroundColor: AppTheme.errorColor,
+  // Show prescription options dialog
+  void _showPrescriptionOptionsDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 5,
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'انتخاب نوع نسخه',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'لطفاً روش ارسال نسخه خود را انتخاب کنید:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ..._prescriptionTypes
+                          .map((type) => _buildPrescriptionTypeCard(
+                                title: type['title'],
+                                icon: type['icon'],
+                                color: type['color'],
+                                description: type['description'],
+                                onTap: () {
+                                  _activatePrescriptionMode(
+                                      type['id'], type['placeholder']);
+                                  Navigator.pop(context);
+                                },
+                              )),
+                    ],
+                  ),
+                ),
+              ],
             ),
           );
-          return null;
-        });
-
-        // اسکرول به پایین پس از ارسال تصویر
-        Future.delayed(const Duration(milliseconds: 300), _scrollToBottom);
-      }
-    } catch (e) {
-      AppLogger.e('Error picking image: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('خطا در انتخاب تصویر. لطفا دوباره تلاش کنید.'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
-    }
+        },
+      ),
+    );
   }
 
-  // Show options for prescription input
-  void _showPrescriptionOptionsDialog() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20.0),
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+  // Build prescription type card
+  Widget _buildPrescriptionTypeCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
             children: [
-              const Text(
-                'نوع نسخه را انتخاب کنید',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
                 ),
               ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading:
-                    const Icon(Icons.text_fields, color: AppTheme.primaryColor),
-                title: const Text('نسخه متنی'),
-                subtitle: const Text('ارسال نسخه به صورت متن'),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _showPrescriptionOptions = false;
-                  });
-                  if (mounted) {
-                    FocusScope.of(context).requestFocus(FocusNode());
-                  }
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (!mounted) return;
-                    _messageController.text = 'نسخه: ';
-                    if (mounted) {
-                      FocusScope.of(context).unfocus();
-                    }
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      if (!mounted) return;
-                      if (mounted) {
-                        FocusScope.of(context).requestFocus(FocusNode());
-                      }
-                    });
-                  });
-                },
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera,
-                    color: AppTheme.primaryColor),
-                title: const Text('عکس از دوربین'),
-                subtitle: const Text('گرفتن عکس از نسخه با دوربین'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library,
-                    color: AppTheme.primaryColor),
-                title: const Text('انتخاب از گالری'),
-                subtitle: const Text('انتخاب تصویر نسخه از گالری'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: Colors.grey,
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  }
+
+  // Activate prescription mode
+  void _activatePrescriptionMode(String typeId, String placeholder) {
+    setState(() {
+      // اگر قبلاً تصویری انتخاب شده بود، آن را پاک کنیم
+      if (_hasSelectedImage) {
+        _hasSelectedImage = false;
+        _selectedImagePath = null;
+      }
+
+      _prescriptionModeActive = true;
+      _selectedPrescriptionType = typeId;
+
+      // Only show input field for text prescriptions, not for image/camera
+      _showInputField = typeId == 'text';
+
+      // Start the expansion animation only for text prescriptions
+      if (typeId == 'text') {
+        _inputExpandController.forward();
+        _messageController.text = placeholder;
+
+        // تنظیم موقعیت مکان‌نما بعد از پیشوند "نسخه: "
+        _messageController.selection = TextSelection.fromPosition(
+          TextPosition(offset: placeholder.length),
+        );
+      } else if (typeId == 'image') {
+        _pickImageFromGallery();
+      } else if (typeId == 'camera') {
+        _pickImageFromCamera();
+      }
+    });
+  }
+
+  // Pick image from gallery
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedImagePath = image.path;
+          _hasSelectedImage = true;
+          // Hide text input field when image is selected
+          _showInputField = false;
+          _inputExpandController.reverse();
+        });
+      } else {
+        // User canceled image selection, reset prescription mode
+        setState(() {
+          _prescriptionModeActive = false;
+          _selectedPrescriptionType = '';
+          _hasSelectedImage = false;
+          _selectedImagePath = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطا در انتخاب تصویر: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+      setState(() {
+        _prescriptionModeActive = false;
+        _selectedPrescriptionType = '';
+        _hasSelectedImage = false;
+        _selectedImagePath = null;
+      });
+    }
+  }
+
+  // Pick image from camera
+  Future<void> _pickImageFromCamera() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedImagePath = image.path;
+          _hasSelectedImage = true;
+          // Hide text input field when image is selected
+          _showInputField = false;
+          _inputExpandController.reverse();
+        });
+      } else {
+        // User canceled camera, reset prescription mode
+        setState(() {
+          _prescriptionModeActive = false;
+          _selectedPrescriptionType = '';
+          _hasSelectedImage = false;
+          _selectedImagePath = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطا در گرفتن عکس: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+      setState(() {
+        _prescriptionModeActive = false;
+        _selectedPrescriptionType = '';
+        _hasSelectedImage = false;
+        _selectedImagePath = null;
+      });
+    }
+  }
+
+  // Send image message
+  Future<void> _sendImageMessage() async {
+    if (_selectedImagePath == null) return;
+
+    setState(() {
+      _isPrescriptionProcessing = true;
+    });
+
+    try {
+      await ref
+          .read(messageListProvider(widget.chat.id).notifier)
+          .sendImageMessage(_selectedImagePath!);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطا در ارسال تصویر: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPrescriptionProcessing = false;
+          _prescriptionModeActive = false;
+          _selectedPrescriptionType = '';
+          _hasSelectedImage = false;
+          _selectedImagePath = null;
+        });
+      }
+    }
+  }
+
+  // Reset prescription mode
+  void _resetPrescriptionMode() {
+    // First run the collapse animation
+    _inputExpandController.reverse().then((_) {
+      // After animation completes, update the state
+      if (mounted) {
+        setState(() {
+          _prescriptionModeActive = false;
+          _selectedPrescriptionType = '';
+          _showInputField = false;
+          _messageController.clear();
+        });
+      }
+    });
   }
 
   // Helper method to process tagged content
@@ -829,20 +1101,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         AppLogger.d(
             'Tagged content preview: ${taggedContent.substring(0, min(100, taggedContent.length))}...');
 
-        // Add expandable panel for the tagged content
-        contentWidgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: ExpandablePanel(
-              title: earliestTagDef['title'] as String,
-              content: taggedContent,
-              color: earliestTagDef['color'] as Color,
-              icon: earliestTagDef['icon'] as IconData,
-              initiallyExpanded: false,
-              width: panelWidth,
+        // Skip empty or unhelpful content
+        if (taggedContent.isNotEmpty &&
+            !_isUnhelpfulContent(
+                taggedContent, earliestTagDef['title'] as String)) {
+          // Add expandable panel for the tagged content
+          contentWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: ExpandablePanel(
+                title: earliestTagDef['title'] as String,
+                content: taggedContent,
+                color: earliestTagDef['color'] as Color,
+                icon: earliestTagDef['icon'] as IconData,
+                initiallyExpanded: false,
+                width: panelWidth,
+                onExpansionChanged: _handlePanelExpansionChanged,
+              ),
             ),
-          ),
-        );
+          );
+        }
 
         // Update remaining content to be after the closing tag
         remainingContent =
@@ -858,6 +1136,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Split the content into paragraphs for easier processing
     List<String> paragraphs = remainingContent.split('\n\n');
     remainingContent = '';
+
+    // Filter out technical or irrelevant content
+    paragraphs = paragraphs.where((paragraph) {
+      // Skip empty paragraphs
+      if (paragraph.trim().isEmpty) return false;
+
+      // Skip technical tags that shouldn't be shown to users
+      if (paragraph.contains('Response ID') ||
+          paragraph.contains('--!>') ||
+          paragraph.contains('-next-') ||
+          paragraph.contains('با سلام همکار گرامی')) {
+        return false;
+      }
+
+      return true;
+    }).toList();
 
     for (int i = 0; i < paragraphs.length; i++) {
       String paragraph = paragraphs[i].trim();
@@ -877,6 +1171,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             taggedContent = taggedContent.substring(1).trim();
           }
 
+          // Skip empty or unhelpful content
+          if (taggedContent.isEmpty ||
+              _isUnhelpfulContent(taggedContent, tagDef['title'] as String)) {
+            processed = true;
+            break;
+          }
+
           // Log for debugging
           AppLogger.d('Found $tag format in paragraph');
           AppLogger.d('Tagged content length: ${taggedContent.length} chars');
@@ -894,6 +1195,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 icon: tagDef['icon'] as IconData,
                 initiallyExpanded: false,
                 width: panelWidth,
+                onExpansionChanged: _handlePanelExpansionChanged,
               ),
             ),
           );
@@ -918,9 +1220,47 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       String currentSection = 'نکات مهم';
 
       for (String paragraph in processedParagraphs) {
+        // Skip paragraphs that contain technical information
+        if (paragraph.contains('Response ID') ||
+            paragraph.contains('--!>') ||
+            paragraph.contains('-next-')) {
+          continue;
+        }
+
+        // Skip greetings in "نکات مهم" section
+        if (paragraph.contains('با سلام همکار گرامی') ||
+            paragraph.contains('با سلام') ||
+            paragraph.contains('سلام همکار')) {
+          continue;
+        }
+
+        // Check for numbered sections (like "1. پیشگیری یا درمان کمبود...")
+        final numberedSectionRegex =
+            RegExp(r'^(\d+\.\s+|\d+\-\s+|[۰-۹]+\.\s+|[۰-۹]+\-\s+)(.+)$');
+        final numberedMatch = numberedSectionRegex.firstMatch(paragraph);
+
+        if (numberedMatch != null) {
+          final sectionTitle = numberedMatch.group(2)!.trim();
+
+          // If it looks like a section title (not too long, no additional content)
+          if (sectionTitle.length < 50 && !sectionTitle.contains(':')) {
+            currentSection = paragraph.trim();
+            sections.putIfAbsent(currentSection, () => []);
+            continue;
+          }
+        }
+
         // Try to identify if this paragraph is a section title
         if (paragraph.contains(':') && paragraph.split(':')[0].length < 40) {
           String potentialTitle = paragraph.split(':')[0].trim();
+
+          // Skip technical or irrelevant titles
+          if (potentialTitle.contains('-next-') ||
+              potentialTitle.contains('Response') ||
+              potentialTitle.contains('ID')) {
+            continue;
+          }
+
           currentSection = potentialTitle;
 
           // Initialize the section if it doesn't exist
@@ -932,6 +1272,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (content.isNotEmpty) {
             sections[currentSection]!.add(content);
           }
+        }
+        // Check for numbered items that might be section headers (like "1. تشخیص احتمالی")
+        else if (RegExp(r'^\d+\.\s+').hasMatch(paragraph)) {
+          final match = RegExp(r'^\d+\.\s+(.+)$').firstMatch(paragraph);
+          if (match != null) {
+            String potentialTitle = match.group(1)!.trim();
+
+            // If it's just a title without content, treat it as a section header
+            if (!paragraph.contains(':') && potentialTitle.length < 40) {
+              currentSection = paragraph.trim();
+              sections.putIfAbsent(currentSection, () => []);
+              continue;
+            }
+          }
+
+          // If it has content, add it to the current section
+          sections.putIfAbsent(currentSection, () => []);
+          sections[currentSection]!.add(paragraph);
         }
         // Check for bullet points or numbered items
         else if (paragraph.startsWith('• ') ||
@@ -964,18 +1322,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         // Skip empty sections
         if (paragraphs.isEmpty) return;
 
+        // Skip technical or irrelevant sections
+        if (title.contains('-next-') ||
+            title.contains('Response') ||
+            title.contains('ID')) {
+          return;
+        }
+
+        // Clean up the title if it contains any technical markers
+        String cleanTitle = title
+            .replaceAll('-next-', '')
+            .replaceAll('Response ID', '')
+            .replaceAll('--!>', '')
+            .trim();
+
+        // Skip if the title is now empty
+        if (cleanTitle.isEmpty) return;
+
         // Combine paragraphs into one content string
         String content = paragraphs.join('\n\n');
 
+        // Skip sections with empty or meaningless content
+        if (_isUnhelpfulContent(content, cleanTitle)) {
+          return;
+        }
+
         // Select a color and icon
         Map<String, dynamic> style;
-        if (specificStyles.containsKey(title)) {
-          style = specificStyles[title]!;
+        if (specificStyles.containsKey(cleanTitle)) {
+          style = specificStyles[cleanTitle]!;
         } else {
           // Try to find a partial match in specificStyles
           String matchedTitle = '';
           for (final key in specificStyles.keys) {
-            if (title.contains(key) && key.length > matchedTitle.length) {
+            if (cleanTitle.contains(key) && key.length > matchedTitle.length) {
               matchedTitle = key;
             }
           }
@@ -994,12 +1374,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: ExpandablePanel(
-              title: title,
+              title: cleanTitle,
               content: content,
               color: style['color'] as Color,
               icon: style['icon'] as IconData,
               initiallyExpanded: false,
               width: panelWidth,
+              onExpansionChanged: _handlePanelExpansionChanged,
             ),
           ),
         );
@@ -1010,6 +1391,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: contentWidgets,
     );
+  }
+
+  // Helper method to check if content is unhelpful
+  bool _isUnhelpfulContent(String content, String title) {
+    // Check for empty content
+    if (content.trim().isEmpty) {
+      return true;
+    }
+
+    // Check for content that just repeats the title
+    if (content.trim().toLowerCase() == title.trim().toLowerCase()) {
+      return true;
+    }
+
+    // Check for content that is just a colon followed by the title
+    if (content.trim() == ":${title.trim()}") {
+      return true;
+    }
+
+    // Check for content that is just "احتمالی:" or "احتمالی"
+    if (content.trim() == "احتمالی:" || content.trim() == "احتمالی") {
+      return true;
+    }
+
+    // Check for content that is just a colon
+    if (content.trim() == ":") {
+      return true;
+    }
+
+    // Check for very short content that doesn't contain specific information
+    if (content.split(' ').length < 3 &&
+        content.length < 15 &&
+        !content.contains('میلی‌گرم') &&
+        !content.contains('mg') &&
+        !content.contains('دوز') &&
+        !content.contains('واحد')) {
+      return true;
+    }
+
+    // Check for content that contains only punctuation or single characters
+    if (content.trim().replaceAll(RegExp(r'[^\w\s]'), '').trim().isEmpty) {
+      return true;
+    }
+
+    // Check for content that is just a dash or bullet point
+    if (content.trim() == "-" ||
+        content.trim() == "•" ||
+        content.trim() == "*") {
+      return true;
+    }
+
+    // Check for content that is just "ندارد" or "وجود ندارد" without additional context
+    if ((content.trim() == "ندارد" || content.trim() == "وجود ندارد") &&
+        !title.contains("تداخل") &&
+        !title.contains("عوارض")) {
+      return true;
+    }
+
+    // Check for content that is just "مشخص نشده" or similar without additional context
+    if (content.trim() == "مشخص نشده" ||
+        content.trim() == "نامشخص" ||
+        content.trim() == "تعیین نشده") {
+      return true;
+    }
+
+    return false;
   }
 
   Widget _buildMessageContent(
@@ -1082,6 +1529,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
+    // Remove any technical identifiers or irrelevant content
+    content = _cleanupTechnicalContent(content);
+
     // Check if this is an error response that wasn't properly marked as an error
     if (_isErrorResponse(content)) {
       return _buildErrorMessageContent(content);
@@ -1092,6 +1542,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return _processTaggedContent(content);
   }
 
+  // Helper method to clean up technical content before displaying
+  String _cleanupTechnicalContent(String content) {
+    // Remove Response ID lines
+    final responseIdRegex = RegExp(r'Response ID.*?--!>', dotAll: true);
+    content = content.replaceAll(responseIdRegex, '');
+
+    // Remove -next- sections
+    content = content.replaceAll('-next-', '');
+
+    // Remove any lines with technical markers
+    final lines = content.split('\n');
+    final cleanedLines = lines
+        .where((line) =>
+            !line.contains('Response ID') &&
+            !line.contains('--!>') &&
+            !line.trim().startsWith('-next-'))
+        .toList();
+
+    // Join lines back together
+    content = cleanedLines.join('\n');
+
+    // Remove any remaining technical tags that might be inline
+    content = content.replaceAll(RegExp(r'</?Response.*?>'), '');
+    content = content.replaceAll(RegExp(r'</?ID.*?>'), '');
+    content = content.replaceAll(RegExp(r'--!>'), '');
+
+    // Clean up multiple consecutive newlines
+    content = content.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+
+    return content;
+  }
+
   Widget _buildErrorMessageContent(String content) {
     // Clean up the error message to avoid repetition
     String cleanedContent = content;
@@ -1100,7 +1582,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (content.contains('لطفا دوباره تلاش کنید')) {
       final parts = content.split('لطفا دوباره تلاش کنید');
       if (parts.length > 1) {
-        cleanedContent = parts[0] + 'لطفا دوباره تلاش کنید';
+        cleanedContent = "${parts[0]}لطفا دوباره تلاش کنید";
       }
     }
 
@@ -1211,136 +1693,195 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: messagesAsync.when(
-              data: (messages) {
-                if (messages.isEmpty) {
-                  return Center(
+            child: Stack(
+              children: [
+                messagesAsync.when(
+                  data: (messages) {
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Lottie.asset(
+                              'assets/animations/empty_messages.json',
+                              width: 200,
+                              height: 200,
+                              repeat: true,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'هنوز پیامی ارسال نشده است',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'اولین پیام خود را ارسال کنید',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      // اسکرول به پایین فقط در صورتی انجام شود که پیام جدیدی دریافت شده باشد
+                      if (messages.isNotEmpty &&
+                          messages.last.role == 'assistant' &&
+                          !messages.last.isLoading &&
+                          !messages.last.isThinking) {
+                        _scrollToBottom();
+                      }
+                    });
+
+                    return RefreshIndicator(
+                      onRefresh: () => ref
+                          .read(messageListProvider(widget.chat.id).notifier)
+                          .loadMessages(),
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(8),
+                        itemCount: messages.length,
+                        key: PageStorageKey<String>(
+                            'chat_list_${widget.chat.id}'),
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          final isUser = message.role == 'user';
+                          final isImage = message.isImage;
+                          final isLoading = message.isLoading;
+                          final isError = message.isError;
+                          final isThinking = message.isThinking;
+
+                          return MessageBubble(
+                            message: message,
+                            isUser: isUser,
+                            isError: isError,
+                            isLoading: isLoading,
+                            isThinking: isThinking,
+                            isImage: isImage,
+                            messageContent: isError
+                                ? _buildErrorMessageContent(message.content)
+                                : _buildMessageContent(message.content, isImage,
+                                    isLoading, isThinking,
+                                    isUser: isUser, isError: isError),
+                            onRetry: isError
+                                ? () {
+                                    // Retry sending the failed message
+                                    final originalContent = message.content
+                                        .split('\n')
+                                        .first
+                                        .replaceFirst(
+                                            'خطا در ارسال پیام: ', '');
+                                    if (originalContent.isNotEmpty) {
+                                      ref
+                                          .read(messageListProvider(
+                                                  widget.chat.id)
+                                              .notifier)
+                                          .sendMessage(originalContent);
+                                    }
+                                  }
+                                : null,
+                            onPanelExpansionChanged:
+                                _handlePanelExpansionChanged,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  loading: () => Center(
+                    child: Lottie.asset(
+                      'assets/animations/loading.json',
+                      width: 200,
+                      height: 200,
+                    ),
+                  ),
+                  error: (error, stack) => Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Lottie.asset(
-                          'assets/animations/empty_messages.json',
-                          width: 200,
-                          height: 200,
-                          repeat: true,
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppTheme.errorColor,
+                          size: 48,
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'هنوز پیامی ارسال نشده است',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryColor,
-                          ),
+                        Text(
+                          'خطا در دریافت پیام‌ها:\n${error.toString()}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppTheme.errorColor),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'اولین پیام خود را ارسال کنید',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.textSecondaryColor,
-                          ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => ref
+                              .read(
+                                  messageListProvider(widget.chat.id).notifier)
+                              .loadMessages(),
+                          child: const Text('تلاش مجدد'),
                         ),
                       ],
                     ),
-                  );
-                }
-
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  // اسکرول به پایین فقط در صورتی انجام شود که پیام جدیدی دریافت شده باشد
-                  if (messages.isNotEmpty &&
-                      messages.last.role == 'assistant' &&
-                      !messages.last.isLoading &&
-                      !messages.last.isThinking) {
-                    _scrollToBottom();
-                  }
-                });
-
-                return RefreshIndicator(
-                  onRefresh: () => ref
-                      .read(messageListProvider(widget.chat.id).notifier)
-                      .loadMessages(),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(8),
-                    itemCount: messages.length,
-                    key: PageStorageKey<String>('chat_list_${widget.chat.id}'),
-                    itemBuilder: (context, index) {
-                      final message = messages[index];
-                      final isUser = message.role == 'user';
-                      final isImage = message.isImage;
-                      final isLoading = message.isLoading;
-                      final isError = message.isError;
-                      final isThinking = message.isThinking;
-
-                      return MessageBubble(
-                        message: message,
-                        isUser: isUser,
-                        isError: isError,
-                        isLoading: isLoading,
-                        isThinking: isThinking,
-                        isImage: isImage,
-                        messageContent: isError
-                            ? _buildErrorMessageContent(message.content)
-                            : _buildMessageContent(
-                                message.content, isImage, isLoading, isThinking,
-                                isUser: isUser, isError: isError),
-                        onRetry: isError
-                            ? () {
-                                // Retry sending the failed message
-                                final originalContent = message.content
-                                    .split('\n')
-                                    .first
-                                    .replaceFirst('خطا در ارسال پیام: ', '');
-                                if (originalContent.isNotEmpty) {
-                                  ref
-                                      .read(messageListProvider(widget.chat.id)
-                                          .notifier)
-                                      .sendMessage(originalContent);
-                                }
-                              }
-                            : null,
-                      );
-                    },
                   ),
-                );
-              },
-              loading: () => Center(
-                child: Lottie.asset(
-                  'assets/animations/loading.json',
-                  width: 200,
-                  height: 200,
                 ),
-              ),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: AppTheme.errorColor,
-                      size: 48,
+
+                // Add a "Close All" button to collapse all expandable panels - only show when panels are expanded
+                if (_isAnyPanelExpanded)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _collapseAllPanels,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.unfold_less,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'بستن همه',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'خطا در دریافت پیام‌ها:\n${error.toString()}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppTheme.errorColor),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref
-                          .read(messageListProvider(widget.chat.id).notifier)
-                          .loadMessages(),
-                      child: const Text('تلاش مجدد'),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
           ),
+          // Improved bottom input area
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -1374,132 +1915,419 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       SizedBox(height: 8),
                     ],
                   ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.medical_services,
-                        color: _isPrescriptionProcessing
-                            ? Colors.grey
-                            : (_showPrescriptionOptions
-                                ? AppTheme.primaryColor
-                                : Colors.grey),
+
+                // Prescription mode indicator
+                if (_prescriptionModeActive && !_isPrescriptionProcessing)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: _getPrescriptionTypeColor().withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _getPrescriptionTypeColor().withOpacity(0.3),
                       ),
-                      onPressed: _isPrescriptionProcessing
-                          ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
-                          : _showPrescriptionOptionsDialog,
-                      tooltip: _isPrescriptionProcessing
-                          ? 'در حال پردازش نسخه...'
-                          : 'ارسال نسخه',
                     ),
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        decoration: InputDecoration(
-                          hintText: _isPrescriptionProcessing
-                              ? 'در حال پردازش نسخه، لطفاً صبر کنید...'
-                              : 'پیام خود را بنویسید...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.light
-                                  ? Colors.grey[100]
-                                  : AppTheme.textPrimaryColor,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getPrescriptionTypeIcon(),
+                          color: _getPrescriptionTypeColor(),
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'در حال ارسال ${_getPrescriptionTypeTitle()}',
+                          style: TextStyle(
+                            color: _getPrescriptionTypeColor(),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
                         ),
-                        textInputAction: TextInputAction.newline,
-                        keyboardType: TextInputType.multiline,
-                        maxLines: 5,
-                        minLines: 1,
-                        enabled:
-                            !_isPrescriptionProcessing, // غیرفعال کردن فیلد در حالت پردازش نسخه
-                        onSubmitted: (_) {
-                          // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
-                        },
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: _resetPrescriptionMode,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          iconSize: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // نمایش پیش‌نمایش تصویر انتخاب شده
+                if (_hasSelectedImage &&
+                    _selectedImagePath != null &&
+                    !_isPrescriptionProcessing)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      height: 150,
+                      // Limit width to prevent overflow
+                      width: MediaQuery.of(context).size.width - 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _getPrescriptionTypeColor().withOpacity(0.5),
+                          width: 2,
+                        ),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // اضافه کردن قابلیت کلیک روی تصویر
+                          GestureDetector(
+                            onTap: () =>
+                                _showFullScreenImage(_selectedImagePath!),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(
+                                File(_selectedImagePath!),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 5,
+                            right: 5,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _hasSelectedImage = false;
+                                    _selectedImagePath = null;
+                                    _prescriptionModeActive = false;
+                                    _selectedPrescriptionType = '';
+                                  });
+                                },
+                                constraints: const BoxConstraints(
+                                  minWidth: 30,
+                                  minHeight: 30,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                          // اضافه کردن آیکون بزرگنمایی برای نشان دادن قابلیت کلیک
+                          Positioned(
+                            bottom: 5,
+                            left: 5,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.zoom_in,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                onPressed: () =>
+                                    _showFullScreenImage(_selectedImagePath!),
+                                constraints: const BoxConstraints(
+                                  minWidth: 30,
+                                  minHeight: 30,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FloatingActionButton(
-                      onPressed: _isPrescriptionProcessing
-                          ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
-                          : () {
-                              if (_messageController.text.isNotEmpty) {
-                                final messageText = _messageController.text;
-                                _messageController.clear();
+                  ),
 
-                                // بررسی اینکه آیا این پیام یک نسخه است یا نه
-                                bool isPrescription =
-                                    messageText.startsWith('نسخه:') ||
-                                        messageText.contains('نسخه') ||
-                                        messageText.contains('دارو') ||
-                                        messageText.contains('قرص') ||
-                                        messageText.contains('کپسول') ||
-                                        messageText.contains('شربت') ||
-                                        messageText.contains('آمپول');
-
-                                // اگر این پیام یک نسخه است، وضعیت پردازش را به روز کن
-                                if (isPrescription) {
-                                  setState(() {
-                                    _isPrescriptionProcessing = true;
-                                  });
-                                }
-
-                                ref
-                                    .read(messageListProvider(widget.chat.id)
-                                        .notifier)
-                                    .sendMessage(messageText)
-                                    .catchError((error) {
-                                  // در صورت خطا، وضعیت پردازش را به روز کن
-                                  if (isPrescription) {
-                                    setState(() {
-                                      _isPrescriptionProcessing = false;
-                                    });
-                                  }
-
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(error.toString()),
-                                      backgroundColor: AppTheme.errorColor,
-                                      action: SnackBarAction(
-                                        label: 'خرید اشتراک',
-                                        onPressed: () {
-                                          // Navigate to subscription screen
-                                          Navigator.pushNamed(
-                                              context, '/subscription');
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                  return null;
-                                });
-
-                                // اسکرول به پایین پس از ارسال پیام
-                                Future.delayed(
-                                    const Duration(milliseconds: 300),
-                                    _scrollToBottom);
-                              }
-                            },
-                      mini: true,
-                      backgroundColor: _isPrescriptionProcessing
-                          ? Colors.grey
-                          : null, // تغییر رنگ دکمه در حالت پردازش
-                      child: const Icon(Icons.send),
+                // Improved input row with better styling
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(30),
+                    color: _prescriptionModeActive
+                        ? _getPrescriptionTypeColor().withOpacity(0.05)
+                        : Colors.grey.withOpacity(0.05),
+                    border: Border.all(
+                      color: _prescriptionModeActive
+                          ? _getPrescriptionTypeColor().withOpacity(0.2)
+                          : Colors.grey.withOpacity(0.2),
+                      width: 1,
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Prescription button with improved styling
+                      Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isPrescriptionProcessing
+                              ? Colors.grey.withOpacity(0.1)
+                              : (_prescriptionModeActive
+                                  ? _getPrescriptionTypeColor().withOpacity(0.1)
+                                  : AppTheme.primaryColor.withOpacity(0.1)),
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            _prescriptionModeActive
+                                ? _getPrescriptionTypeIcon()
+                                : Icons.medical_services,
+                            color: _isPrescriptionProcessing
+                                ? Colors.grey
+                                : (_prescriptionModeActive
+                                    ? _getPrescriptionTypeColor()
+                                    : AppTheme.primaryColor),
+                            size: 22,
+                          ),
+                          onPressed: _isPrescriptionProcessing
+                              ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
+                              : _showPrescriptionOptionsDialog,
+                          tooltip: _isPrescriptionProcessing
+                              ? 'در حال پردازش نسخه...'
+                              : 'ارسال نسخه',
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+
+                      // Text field with animation
+                      Expanded(
+                        child: AnimatedBuilder(
+                          animation: _inputExpandController,
+                          builder: (context, child) {
+                            // Don't show text field at all when image is selected
+                            if (_hasSelectedImage) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return ClipRect(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                widthFactor: _showInputField
+                                    ? _inputWidthAnimation.value
+                                    : 0.01,
+                                child: Container(
+                                  height: _showInputField ? null : 40,
+                                  width: _showInputField ? null : 2,
+                                  decoration: BoxDecoration(
+                                    color: _showInputField
+                                        ? null
+                                        : Colors.grey.shade800,
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: _showInputField
+                                      ? TextField(
+                                          controller: _messageController,
+                                          decoration: InputDecoration(
+                                            hintText: _getInputPlaceholder(),
+                                            border: InputBorder.none,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                          textInputAction:
+                                              TextInputAction.newline,
+                                          keyboardType: TextInputType.multiline,
+                                          maxLines: 5,
+                                          minLines: 1,
+                                          enabled: !_isPrescriptionProcessing,
+                                          onChanged: (text) {
+                                            // اگر در حالت نسخه متنی هستیم، مطمئن شویم که پیشوند "نسخه: " حذف نشود
+                                            if (_prescriptionModeActive &&
+                                                _selectedPrescriptionType ==
+                                                    'text' &&
+                                                !text.startsWith('نسخه: ')) {
+                                              _messageController.text =
+                                                  'نسخه: ${text.replaceAll('نسخه:', '')}';
+                                              _messageController.selection =
+                                                  TextSelection.fromPosition(
+                                                TextPosition(
+                                                    offset: _messageController
+                                                        .text.length),
+                                              );
+                                            }
+                                          },
+                                          onSubmitted: (_) {
+                                            // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
+                                          },
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      // Send button with improved styling
+                      Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isPrescriptionProcessing
+                              ? Colors.grey.withOpacity(0.1)
+                              : (_hasSelectedImage ||
+                                      (_showInputField &&
+                                          _messageController.text.isNotEmpty)
+                                  ? (_prescriptionModeActive
+                                      ? _getPrescriptionTypeColor()
+                                      : AppTheme.primaryColor)
+                                  : Colors.grey.withOpacity(0.1)),
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            _isPrescriptionProcessing
+                                ? Icons.hourglass_empty
+                                : Icons.send,
+                            color: _isPrescriptionProcessing
+                                ? Colors.grey
+                                : (_hasSelectedImage ||
+                                        (_showInputField &&
+                                            _messageController.text.isNotEmpty)
+                                    ? Colors.white
+                                    : Colors.grey),
+                            size: 20,
+                          ),
+                          onPressed: _isPrescriptionProcessing
+                              ? null
+                              : (_hasSelectedImage ||
+                                      (_showInputField &&
+                                          _messageController.text.isNotEmpty)
+                                  ? () {
+                                      if (_hasSelectedImage) {
+                                        // ارسال تصویر انتخاب شده
+                                        _sendImageMessage();
+                                      } else if (_prescriptionModeActive &&
+                                          _messageController.text.isNotEmpty) {
+                                        final messageText =
+                                            _messageController.text;
+                                        _messageController.clear();
+
+                                        setState(() {
+                                          _isPrescriptionProcessing = true;
+                                        });
+
+                                        ref
+                                            .read(messageListProvider(
+                                                    widget.chat.id)
+                                                .notifier)
+                                            .sendMessage(messageText)
+                                            .then((_) {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isPrescriptionProcessing = false;
+                                              _prescriptionModeActive = false;
+                                              _selectedPrescriptionType = '';
+                                              _showInputField = false;
+                                              _inputExpandController.reverse();
+                                            });
+                                          }
+                                        }).catchError((error) {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isPrescriptionProcessing = false;
+                                            });
+
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(error.toString()),
+                                                backgroundColor:
+                                                    AppTheme.errorColor,
+                                                action: SnackBarAction(
+                                                  label: 'خرید اشتراک',
+                                                  onPressed: () {
+                                                    Navigator.pushNamed(context,
+                                                        '/subscription');
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return null;
+                                        });
+                                      }
+                                    }
+                                  : null),
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+
+                // Add a hint text when no prescription option is selected
+                if (!_prescriptionModeActive &&
+                    !_showInputField &&
+                    !_isPrescriptionProcessing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      'برای ارسال نسخه، روی آیکون نسخه کلیک کنید',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  // Method to collapse all expandable panels
+  void _collapseAllPanels() {
+    // Use a notification to communicate with all ExpandablePanel widgets
+    CollapseAllPanelsNotification().dispatch(context);
+
+    // Update the state to reflect that no panel is expanded
+    setState(() {
+      _isAnyPanelExpanded = false;
+    });
+
+    // Show a snackbar to confirm the action
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('تمام بخش‌ها بسته شدند'),
+        duration: Duration(seconds: 1),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+    );
+  }
+
+  // Method to handle panel expansion state changes
+  void _handlePanelExpansionChanged(bool isExpanded) {
+    if (isExpanded && !_isAnyPanelExpanded) {
+      setState(() {
+        _isAnyPanelExpanded = true;
+      });
+    }
   }
 
   // Helper method to check if a message is a prescription response
@@ -1719,14 +2547,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         AppLogger.i('Is prescription response: $isPrescriptionResponse');
 
         if (isPrescriptionResponse) {
-          // Wait a moment to ensure the server has processed the subscription update
+          // Immediately trigger a refresh of the subscription count
+          _forceRefreshSubscriptionWithAPI(showSnackBar: false);
+
+          // Also schedule another refresh after a short delay to ensure the server has processed the update
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
               // Log for debugging
               AppLogger.i(
-                  'Refreshing subscription plan after receiving prescription response');
+                  'Second refresh of subscription plan after receiving prescription response');
 
-              // Force refresh the subscription data - just once is enough
+              // Force refresh the subscription data again
               _forceRefreshSubscriptionWithAPI(showSnackBar: false);
             }
           });
@@ -1739,5 +2570,59 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       AppLogger.i('Prescription processing failed, enabling input');
     }
+  }
+
+  // Helper methods for prescription mode
+  Color _getPrescriptionTypeColor() {
+    final type = _prescriptionTypes.firstWhere(
+      (type) => type['id'] == _selectedPrescriptionType,
+      orElse: () => {'color': AppTheme.primaryColor},
+    );
+    return type['color'] as Color;
+  }
+
+  IconData _getPrescriptionTypeIcon() {
+    final type = _prescriptionTypes.firstWhere(
+      (type) => type['id'] == _selectedPrescriptionType,
+      orElse: () => {'icon': Icons.medical_services},
+    );
+    return type['icon'] as IconData;
+  }
+
+  String _getPrescriptionTypeTitle() {
+    final type = _prescriptionTypes.firstWhere(
+      (type) => type['id'] == _selectedPrescriptionType,
+      orElse: () => {'title': 'نسخه'},
+    );
+    return type['title'] as String;
+  }
+
+  String _getInputPlaceholder() {
+    if (_isPrescriptionProcessing) {
+      return 'در حال پردازش نسخه، لطفاً صبر کنید...';
+    } else if (!_prescriptionModeActive) {
+      return 'برای ارسال نسخه، ابتدا نوع نسخه را انتخاب کنید...';
+    } else if (_selectedPrescriptionType == 'text') {
+      return 'نسخه خود را وارد کنید...';
+    } else if (_selectedPrescriptionType == 'image') {
+      return 'در حال ارسال تصویر نسخه...';
+    } else if (_selectedPrescriptionType == 'camera') {
+      return 'در حال ارسال عکس نسخه...';
+    } else {
+      return 'پیام خود را بنویسید...';
+    }
+  }
+
+  // نمایش تصویر به صورت تمام صفحه
+  void _showFullScreenImage(String imagePath) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImageViewerScreen(
+          imageUrl: imagePath,
+          isNetworkImage: false,
+          heroTag: 'image_preview_${DateTime.now().millisecondsSinceEpoch}',
+        ),
+      ),
+    );
   }
 }

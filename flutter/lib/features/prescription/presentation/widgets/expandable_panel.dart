@@ -3,6 +3,16 @@ import 'package:flutter/gestures.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive_size.dart';
 
+// Create a notification for panel expansion state changes
+class ExpandablePanelExpansionNotification extends Notification {
+  final bool isExpanded;
+
+  ExpandablePanelExpansionNotification(this.isExpanded);
+}
+
+// Notification for collapsing all panels
+class CollapseAllPanelsNotification extends Notification {}
+
 class ExpandablePanel extends StatefulWidget {
   final String title;
   final String content;
@@ -10,6 +20,7 @@ class ExpandablePanel extends StatefulWidget {
   final IconData icon;
   final bool initiallyExpanded;
   final double? width;
+  final Function(bool)? onExpansionChanged;
 
   const ExpandablePanel({
     Key? key,
@@ -19,6 +30,7 @@ class ExpandablePanel extends StatefulWidget {
     required this.icon,
     this.initiallyExpanded = false,
     this.width,
+    this.onExpansionChanged,
   }) : super(key: key);
 
   @override
@@ -62,12 +74,30 @@ class _ExpandablePanelState extends State<ExpandablePanel>
       _isExpanded = !_isExpanded;
       if (_isExpanded) {
         _controller.forward();
+        // Notify parent when panel is expanded
+        if (widget.onExpansionChanged != null) {
+          widget.onExpansionChanged!(true);
+        }
+        // Send notification about expansion state change
+        ExpandablePanelExpansionNotification(true).dispatch(context);
       } else {
         _controller.reverse();
       }
       PageStorage.of(context)
           .writeState(context, _isExpanded, identifier: widget.title);
     });
+  }
+
+  // Method to collapse the panel
+  void _collapse() {
+    if (_isExpanded) {
+      setState(() {
+        _isExpanded = false;
+        _controller.reverse();
+        PageStorage.of(context)
+            .writeState(context, false, identifier: widget.title);
+      });
+    }
   }
 
   Widget _buildChildren(BuildContext context, Widget? child) {
@@ -238,108 +268,119 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   Widget build(BuildContext context) {
     final bool closed = !_isExpanded && _controller.isDismissed;
 
-    return AnimatedBuilder(
-      animation: _controller.view,
-      builder: _buildChildren,
-      child: closed
-          ? null
-          : NotificationListener<ScrollNotification>(
-              // Allow scroll notifications to propagate to parent
-              onNotification: (ScrollNotification notification) {
-                // Return false to allow the notification to continue to be dispatched to further ancestors
-                return false;
-              },
-              child: Listener(
-                // Handle mouse wheel events
-                onPointerSignal: (PointerSignalEvent event) {
-                  // Do nothing, allowing the event to propagate to parent
+    // Wrap with NotificationListener to listen for CollapseAllPanelsNotification
+    return NotificationListener<CollapseAllPanelsNotification>(
+      onNotification: (notification) {
+        _collapse();
+        return false; // Allow the notification to continue to be dispatched to further ancestors
+      },
+      child: AnimatedBuilder(
+        animation: _controller.view,
+        builder: _buildChildren,
+        child: closed
+            ? null
+            : NotificationListener<ScrollNotification>(
+                // Allow scroll notifications to propagate to parent
+                onNotification: (ScrollNotification notification) {
+                  // Return false to allow the notification to continue to be dispatched to further ancestors
+                  return false;
                 },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(16.0),
-                      bottomRight: Radius.circular(16.0),
+                child: Listener(
+                  // Handle mouse wheel events
+                  onPointerSignal: (PointerSignalEvent event) {
+                    // Do nothing, allowing the event to propagate to parent
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(16.0),
+                        bottomRight: Radius.circular(16.0),
+                      ),
+                      border: Border.all(
+                        color: widget.color.withOpacity(0.2),
+                      ),
                     ),
-                    border: Border.all(
-                      color: widget.color.withOpacity(0.2),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        ResponsiveSize.size(16),
-                        ResponsiveSize.size(16),
-                        ResponsiveSize.size(16),
-                        ResponsiveSize.size(8)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Listener(
-                          // Handle mouse wheel events explicitly for the text
-                          onPointerSignal: (PointerSignalEvent event) {
-                            // Do nothing, allowing the event to propagate to parent
-                          },
-                          // Make sure drag gestures don't get captured for text selection
-                          behavior: HitTestBehavior.translucent,
-                          child: SelectableText(
-                            widget.content,
-                            style: TextStyle(
-                              fontSize: ResponsiveSize.fontSize(15),
-                              height: 1.5,
-                              color: AppTheme.textPrimaryColor,
-                            ),
-                            textAlign: TextAlign.justify,
-                            selectionControls: MaterialTextSelectionControls(),
-                            contextMenuBuilder: (context, editableTextState) {
-                              return AdaptiveTextSelectionToolbar.editableText(
-                                editableTextState: editableTextState,
-                              );
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                          ResponsiveSize.size(16),
+                          ResponsiveSize.size(16),
+                          ResponsiveSize.size(16),
+                          ResponsiveSize.size(8)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Listener(
+                            // Handle mouse wheel events explicitly for the text
+                            onPointerSignal: (PointerSignalEvent event) {
+                              // Do nothing, allowing the event to propagate to parent
                             },
-                            textScaleFactor: 1.0,
-                            maxLines: null,
-                            textDirection: TextDirection.rtl,
-                            showCursor: true,
-                            enableInteractiveSelection: true,
-                          ),
-                        ),
-                        Container(
-                          alignment: Alignment.centerRight,
-                          margin:
-                              EdgeInsets.only(top: ResponsiveSize.vertical(4)),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: ResponsiveSize.width(50),
-                            ),
-                            child: TextButton.icon(
-                              onPressed: _handleTap,
-                              icon: Icon(Icons.keyboard_arrow_up,
-                                  size: ResponsiveSize.size(16)),
-                              label: Text(
-                                'بستن',
-                                style: TextStyle(
-                                  fontSize: ResponsiveSize.fontSize(12),
-                                  color: widget.color,
-                                ),
+                            // Make sure drag gestures don't get captured for text selection
+                            behavior: HitTestBehavior.translucent,
+                            child: SelectableText(
+                              widget.content,
+                              style: TextStyle(
+                                fontSize: ResponsiveSize.fontSize(15),
+                                height: 1.5,
+                                color: AppTheme.textPrimaryColor,
                               ),
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: ResponsiveSize.horizontal(3),
-                                  vertical: ResponsiveSize.vertical(0.5),
-                                ),
-                                backgroundColor: widget.color.withOpacity(0.1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: ResponsiveSize.borderRadius(8),
-                                ),
-                              ),
+                              textAlign: TextAlign.justify,
+                              selectionControls:
+                                  MaterialTextSelectionControls(),
+                              contextMenuBuilder: (context, editableTextState) {
+                                return AdaptiveTextSelectionToolbar
+                                    .editableText(
+                                  editableTextState: editableTextState,
+                                );
+                              },
+                              textScaleFactor: 1.0,
+                              maxLines: null,
+                              textDirection: TextDirection.rtl,
+                              showCursor: true,
+                              enableInteractiveSelection: true,
                             ),
                           ),
-                        ),
-                      ],
+                          Container(
+                            alignment: Alignment.centerRight,
+                            margin: EdgeInsets.only(
+                                top: ResponsiveSize.vertical(4)),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: ResponsiveSize.width(50),
+                              ),
+                              child: TextButton.icon(
+                                onPressed: _handleTap,
+                                icon: Icon(Icons.keyboard_arrow_up,
+                                    size: ResponsiveSize.size(16)),
+                                label: Text(
+                                  'بستن',
+                                  style: TextStyle(
+                                    fontSize: ResponsiveSize.fontSize(12),
+                                    color: widget.color,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: ResponsiveSize.horizontal(3),
+                                    vertical: ResponsiveSize.vertical(0.5),
+                                  ),
+                                  backgroundColor:
+                                      widget.color.withOpacity(0.1),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        ResponsiveSize.borderRadius(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+      ),
     );
   }
 }

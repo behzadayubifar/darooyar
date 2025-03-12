@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/message_formatter.dart';
 import '../models/message.dart';
 import 'message_actions.dart';
+import '../../../features/prescription/presentation/widgets/expandable_panel.dart';
 
 /// ویجت نمایش حباب پیام با دکمه‌های عملیات
 class MessageBubble extends StatelessWidget {
@@ -15,6 +16,7 @@ class MessageBubble extends StatelessWidget {
   final bool isImage;
   final Widget messageContent;
   final VoidCallback? onRetry;
+  final Function(bool)? onPanelExpansionChanged;
 
   const MessageBubble({
     Key? key,
@@ -26,6 +28,7 @@ class MessageBubble extends StatelessWidget {
     required this.isImage,
     required this.messageContent,
     this.onRetry,
+    this.onPanelExpansionChanged,
   }) : super(key: key);
 
   @override
@@ -85,7 +88,16 @@ class MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                messageContent,
+                // Pass the onPanelExpansionChanged callback to the content
+                NotificationListener<ExpandablePanelExpansionNotification>(
+                  onNotification: (notification) {
+                    if (onPanelExpansionChanged != null) {
+                      onPanelExpansionChanged!(notification.isExpanded);
+                    }
+                    return false;
+                  },
+                  child: messageContent,
+                ),
                 const SizedBox(height: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,

@@ -29,52 +29,70 @@ class UsageCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircularPercentIndicator(
-                radius: 30.0,
-                lineWidth: 5.0,
-                percent: percentage,
-                center: Icon(
-                  icon,
-                  color: AppTheme.primaryColor,
-                  size: 24,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: AppTheme.primaryColor.withOpacity(0.3), width: 1),
                 ),
-                progressColor: AppTheme.primaryColor,
-                backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
-                circularStrokeCap: CircularStrokeCap.round,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppTheme.textSecondaryColor,
-                      ),
+                child: Center(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryColor,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  CircularPercentIndicator(
+                    radius: 25.0,
+                    lineWidth: 4.0,
+                    percent: percentage,
+                    center: Icon(
+                      icon,
+                      color: AppTheme.primaryColor,
+                      size: 20,
+                    ),
+                    progressColor: AppTheme.primaryColor,
+                    backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
+                    circularStrokeCap: CircularStrokeCap.round,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
                       value,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimaryColor,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: AppTheme.textSecondaryColor,
                     ),
                   ],
-                ),
+                ],
               ),
-              if (onTap != null)
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: AppTheme.textSecondaryColor,
-                ),
             ],
           ),
         ),

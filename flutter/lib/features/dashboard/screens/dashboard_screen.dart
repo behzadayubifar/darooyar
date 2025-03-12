@@ -500,17 +500,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppTheme.primaryColor, Color(0xFF7986CB)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Text(
                     'اشتراک فعال: ${plan.name}',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
-                TextButton(
+                TextButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -519,7 +531,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       ),
                     );
                   },
-                  child: const Text('تغییر'),
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('تغییر'),
                 ),
               ],
             ),
@@ -528,23 +541,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               children: [
                 Expanded(
                   child: _buildUsageCard(
-                    title: 'زمان',
-                    icon: Icons.access_time,
+                    title: 'زمان باقیمانده',
+                    icon: Icons.calendar_today,
                     color: Colors.blue,
                     percent: plan.hasTimeLimit ? timeUsed : 0,
                     value: plan.hasTimeLimit ? '$remainingDays روز' : 'نامحدود',
                     showProgress: plan.hasTimeLimit,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _buildUsageCard(
-                    title: 'نسخه‌ها',
+                    title: 'نسخه‌های باقیمانده',
                     icon: Icons.description,
                     color: Colors.green,
                     percent: prescriptionsUsed,
-                    value: '$remainingUses از ${plan.prescriptionCount}',
-                    showProgress: true,
+                    value: plan.prescriptionCount > 0
+                        ? '$remainingUses از ${plan.prescriptionCount}'
+                        : 'نامحدود',
+                    showProgress: plan.prescriptionCount > 0,
                   ),
                 ),
               ],
@@ -577,50 +592,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  flex: 3,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, color: color, size: 18),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+            // Title at the top with full width
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withOpacity(0.3), width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: color,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(width: 4),
-                Flexible(
-                  flex: 2,
-                  child: Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.end,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Value with right alignment
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
             if (showProgress) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               LinearPercentIndicator(
                 lineHeight: 8,
                 percent: 1 - percent, // Remaining percentage
@@ -647,11 +660,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'ویژگی‌های اشتراک شما',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    Border.all(color: Colors.green.withOpacity(0.3), width: 1),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'ویژگی‌های اشتراک شما',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -686,11 +720,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'دسترسی سریع',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border:
+                  Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.flash_on,
+                  color: Colors.orange,
+                  size: 18,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'دسترسی سریع',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),

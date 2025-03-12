@@ -83,7 +83,7 @@ class PlanUsageCards extends ConsumerWidget {
             if (plan.prescriptionCount > 0)
               UsageCard(
                 title: 'نسخه‌های باقیمانده',
-                value: '$remainingUses نسخه',
+                value: '$remainingUses از ${plan.prescriptionCount}',
                 percentage: usesPercentage,
                 icon: Icons.description,
                 onTap: () {

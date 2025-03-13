@@ -18,6 +18,8 @@ import '../widgets/message_bubble.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import 'image_viewer_screen.dart';
+import '../../../utils/myket_utils.dart';
+import '../../../main.dart'; // Import main.dart for myketRatingServiceProvider
 
 // Use the CollapseAllPanelsNotification from expandable_panel.dart
 
@@ -1654,69 +1656,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           // Widget to display remaining prescriptions - more compact version
           Container(
             margin: const EdgeInsets.only(right: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            decoration: BoxDecoration(
+              color: _remainingPrescriptions > 0
+                  ? Colors.green.withOpacity(0.2)
+                  : Colors.red.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Refresh button
-                IconButton(
-                  icon: _isRefreshing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.refresh, size: 18),
-                  onPressed: _isRefreshing
-                      ? null
-                      : () {
-                          setState(() {
-                            _isRefreshing = true;
-                          });
-                          AppLogger.i('Manually refreshing subscription plan');
-                          _forceRefreshSubscription(showSnackBar: false);
-                        },
-                  tooltip: 'به‌روزرسانی اطلاعات اشتراک',
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
-                  visualDensity: VisualDensity.compact,
+                Icon(
+                  Icons.receipt,
+                  size: 16,
+                  color:
+                      _remainingPrescriptions > 0 ? Colors.green : Colors.red,
                 ),
-                // Compact prescription count indicator
-                Tooltip(
-                  message: '$_remainingPrescriptions نسخه باقیمانده',
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.medical_services_outlined,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$_remainingPrescriptions',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(width: 4),
+                Text(
+                  '$_remainingPrescriptions',
+                  style: TextStyle(
+                    color:
+                        _remainingPrescriptions > 0 ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
+          ),
+          // Add Myket rating button
+          IconButton(
+            icon: const Icon(Icons.star, color: Colors.amber),
+            tooltip: 'نظر و امتیاز دهید',
+            onPressed: () {
+              MyketUtils.openRatingPage();
+              // Mark as rated in the service
+              ref.read(myketRatingServiceProvider).markAsRated();
+            },
+          ),
+          // Menu button
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'rate') {
+                MyketUtils.openRatingPage();
+                // Mark as rated in the service
+                ref.read(myketRatingServiceProvider).markAsRated();
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'rate',
+                child: ListTile(
+                  leading: Icon(Icons.star, color: Colors.amber),
+                  title: Text('نظر و امتیاز دهید'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

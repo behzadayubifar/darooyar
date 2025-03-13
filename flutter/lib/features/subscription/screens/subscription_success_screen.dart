@@ -6,6 +6,8 @@ import '../../../core/utils/number_formatter.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/subscription_providers.dart';
 import '../providers/subscription_provider.dart';
+import '../../../utils/myket_utils.dart';
+import '../../../main.dart'; // Import main.dart for myketRatingServiceProvider
 
 class SubscriptionSuccessScreen extends ConsumerStatefulWidget {
   final Plan plan;
@@ -188,6 +190,24 @@ class _SubscriptionSuccessScreenState
               ),
 
               const SizedBox(height: 32),
+
+              // Add rating button
+              OutlinedButton.icon(
+                onPressed: () {
+                  MyketUtils.openRatingPage();
+                  // Mark as rated in the service
+                  ref.read(myketRatingServiceProvider).markAsRated();
+                },
+                icon: const Icon(Icons.star, color: Colors.amber),
+                label: const Text('نظر و امتیاز دهید'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.amber),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+
+              const SizedBox(height: 24),
 
               // Continue button with improved visibility in dark mode
               SizedBox(

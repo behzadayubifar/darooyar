@@ -17,9 +17,25 @@ import 'features/settings/screens/settings_screen.dart';
 import 'features/chat/services/chat_service.dart';
 import 'features/subscription/screens/subscription_screen.dart';
 import 'features/dashboard/screens/dashboard_screen.dart';
+import 'services/myket_rating_service.dart';
+import 'utils/myket_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Flag to track if API endpoint discovery has been run
 bool _apiEndpointDiscoveryRun = false;
+
+// Create a provider for the Myket rating service
+final myketRatingServiceProvider = Provider<MyketRatingService>((ref) {
+  return MyketRatingService(
+    minLaunchCount: 5,
+    daysBeforeReminding: 10,
+  );
+});
+
+// Create a provider for the Myket update check service
+final myketUpdateCheckProvider = Provider<MyketUpdateCheckService>((ref) {
+  return MyketUpdateCheckService();
+});
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +84,45 @@ void main() async {
   );
 }
 
+/// Service to check for app updates from Myket
+class MyketUpdateCheckService {
+  static const String _lastUpdateCheckKey = 'last_update_check';
+  static const int _updateCheckIntervalDays = 1; // Check once a day
+
+  /// Checks if the app needs to be updated
+  Future<void> checkForUpdates(BuildContext context) async {
+    try {
+      // Check if we've already checked for updates recently
+      final prefs = await SharedPreferences.getInstance();
+      final lastCheck = prefs.getString(_lastUpdateCheckKey);
+
+      final now = DateTime.now();
+      if (lastCheck != null) {
+        final lastCheckDate = DateTime.parse(lastCheck);
+        final difference = now.difference(lastCheckDate).inDays;
+
+        // If we've checked recently, skip
+        if (difference < _updateCheckIntervalDays) {
+          return;
+        }
+      }
+
+      // Update the last check time
+      await prefs.setString(_lastUpdateCheckKey, now.toIso8601String());
+
+      // Delay the check slightly to allow the app to initialize
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Check for updates if context is still valid
+      if (context.mounted) {
+        await MyketUtils.checkForUpdate(context);
+      }
+    } catch (e) {
+      debugPrint('Error checking for updates: $e');
+    }
+  }
+}
+
 class MyApp extends ConsumerWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -98,6 +153,24 @@ class MyApp extends ConsumerWidget {
               isDarkMode ? Brightness.light : Brightness.dark,
         ),
       );
+
+      // Check if we should show the rating dialog after the app has initialized
+      // and the user is authenticated
+      if (isInitialized.hasValue &&
+          isInitialized.value == true &&
+          authState.hasValue &&
+          authState.valueOrNull != null) {
+        // Delay showing the dialog to ensure the app is fully loaded
+        Future.delayed(const Duration(seconds: 5), () {
+          // First check for updates
+          final updateService = ref.read(myketUpdateCheckProvider);
+          updateService.checkForUpdates(context);
+
+          // Then check if we should show the rating dialog
+          final myketRatingService = ref.read(myketRatingServiceProvider);
+          myketRatingService.checkAndShowRatingDialog(context);
+        });
+      }
     });
 
     // Run API endpoint discovery when authenticated (only in debug mode)

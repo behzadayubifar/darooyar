@@ -20,6 +20,9 @@ import '../../subscription/screens/subscription_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/utils/number_formatter.dart';
 import 'dart:math' as Math;
+import '../../../utils/myket_utils.dart';
+import '../../../services/myket_rating_service.dart';
+import '../../../main.dart'; // Import main.dart for myketRatingServiceProvider
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -852,19 +855,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               ),
               _buildActionButton(
                 context,
-                icon: Icons.settings,
-                label: 'تنظیمات',
-                color: Colors.teal,
+                icon: Icons.star,
+                label: 'نظر و امتیاز',
+                color: Colors.amber,
                 onTap: () {
-                  final user = ref.read(authStateProvider).valueOrNull;
-                  if (user != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SettingsScreen(user: user),
-                      ),
-                    );
-                  }
+                  MyketUtils.openRatingPage();
+                  // Mark as rated in the service
+                  ref.read(myketRatingServiceProvider).markAsRated();
                 },
               ),
             ],
@@ -1569,9 +1566,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             color: AppTheme.primaryColor,
           ),
         ),
-        content: const Text(
-          'آیا از خروج از برنامه مطمئن هستید؟',
-          style: TextStyle(fontSize: 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'آیا از خروج از برنامه مطمئن هستید؟',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            // Add rating button
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                MyketUtils.openRatingPage();
+                // Mark as rated in the service
+                ref.read(myketRatingServiceProvider).markAsRated();
+              },
+              icon: const Icon(Icons.star, color: Colors.amber),
+              label: const Text('نظر و امتیاز دهید'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.amber),
+              ),
+            ),
+          ],
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(15),

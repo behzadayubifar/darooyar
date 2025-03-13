@@ -6,6 +6,9 @@ import '../../../core/utils/logger.dart';
 import '../../../core/utils/number_formatter.dart';
 import '../../auth/models/user.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../../utils/myket_utils.dart';
+import '../../../services/myket_rating_service.dart';
+import '../widgets/myket_rating_section.dart';
 
 // Theme mode provider
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
@@ -526,6 +529,11 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+
+          // Myket Rating Section
+          const MyketRatingSection(),
+
           const SizedBox(height: 24),
 
           // Credit Management Section (if needed)

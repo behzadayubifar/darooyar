@@ -5,9 +5,10 @@ import '../../../core/utils/message_formatter.dart';
 import '../models/message.dart';
 import 'message_actions.dart';
 import '../../../features/prescription/presentation/widgets/expandable_panel.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 
 /// ویجت نمایش حباب پیام با دکمه‌های عملیات
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   final Message message;
   final bool isUser;
   final bool isError;
@@ -16,7 +17,7 @@ class MessageBubble extends StatelessWidget {
   final bool isImage;
   final Widget messageContent;
   final VoidCallback? onRetry;
-  final Function(bool)? onPanelExpansionChanged;
+  final dynamic onPanelExpansionChanged;
 
   const MessageBubble({
     Key? key,
@@ -32,17 +33,31 @@ class MessageBubble extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble> {
+  final ValueNotifier<bool> isHovering = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    isHovering.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Align(
-      alignment: isUser
+      alignment: widget.isUser
           ? Alignment.centerRight
-          : (message.role == 'assistant' &&
-                  (message.content.contains('۱. تشخیص احتمالی') ||
-                      message.content.contains('۲. تداخلات مهم') ||
-                      message.content.contains('۳. عوارض مهم') ||
+          : (widget.message.role == 'assistant' &&
+                  (widget.message.content.contains('۱. تشخیص احتمالی') ||
+                      widget.message.content.contains('۲. تداخلات مهم') ||
+                      widget.message.content.contains('۳. عوارض مهم') ||
                       MessageFormatter.isPrescriptionAnalysis(
-                          message.content) ||
-                      MessageFormatter.isStructuredFormat(message.content)))
+                          widget.message.content) ||
+                      MessageFormatter.isStructuredFormat(
+                          widget.message.content)))
               ? Alignment.center
               : Alignment.centerLeft,
       // Use NotificationListener for touch/drag scrolling and Listener for mouse wheel
@@ -53,80 +68,100 @@ class MessageBubble extends StatelessWidget {
           return false;
         },
         child: Listener(
-          // Handle mouse wheel events
           onPointerSignal: (PointerSignalEvent event) {
             // Do nothing, allowing the event to propagate to parent
           },
-          // Use IgnorePointer to specifically ignore drag gestures for scrolling but keep taps for actions
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isError
-                  ? Colors.red[700]
-                  : isThinking
-                      ? Colors.blue[700]
-                      : isUser
-                          ? AppTheme.primaryColor
-                          : const Color.fromARGB(255, 36, 47, 61),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            constraints: BoxConstraints(
-              maxWidth: isThinking || isError
-                  ? MediaQuery.of(context).size.width * 0.75
-                  : message.role == 'assistant' &&
-                          (message.content.contains('۱. تشخیص احتمالی') ||
-                              message.content.contains('۲. تداخلات مهم') ||
-                              message.content.contains('۳. عوارض مهم') ||
-                              MessageFormatter.isPrescriptionAnalysis(
-                                  message.content) ||
-                              MessageFormatter.isStructuredFormat(
-                                  message.content))
-                      ? MediaQuery.of(context).size.width * 0.85
-                      : MediaQuery.of(context).size.width * 0.75,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Pass the onPanelExpansionChanged callback to the content
-                NotificationListener<ExpandablePanelExpansionNotification>(
-                  onNotification: (notification) {
-                    if (onPanelExpansionChanged != null) {
-                      onPanelExpansionChanged!(notification.isExpanded);
-                    }
-                    return false;
-                  },
-                  child: messageContent,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        message.createdAt.toLocal().toString().split('.')[0],
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isUser || isError
-                              ? Colors.white70
-                              : Colors.black54,
+          child: MouseRegion(
+            onEnter: (_) => isHovering.value = true,
+            onExit: (_) => isHovering.value = false,
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: widget.isError
+                    ? Colors.red[700]
+                    : widget.isThinking
+                        ? Colors.blue[700]
+                        : widget.isUser
+                            ? AppTheme.primaryColor
+                            : const Color.fromARGB(255, 36, 47, 61),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              constraints: BoxConstraints(
+                maxWidth: widget.isThinking || widget.isError
+                    ? MediaQuery.of(context).size.width * 0.75
+                    : widget.message.role == 'assistant' &&
+                            (widget.message.content
+                                    .contains('۱. تشخیص احتمالی') ||
+                                widget.message.content
+                                    .contains('۲. تداخلات مهم') ||
+                                widget.message.content
+                                    .contains('۳. عوارض مهم') ||
+                                MessageFormatter.isPrescriptionAnalysis(
+                                    widget.message.content) ||
+                                MessageFormatter.isStructuredFormat(
+                                    widget.message.content))
+                        ? MediaQuery.of(context).size.width * 0.85
+                        : MediaQuery.of(context).size.width * 0.75,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Pass the onPanelExpansionChanged callback to the content
+                  NotificationListener<ExpandablePanelExpansionNotification>(
+                    onNotification: (notification) {
+                      if (widget.onPanelExpansionChanged != null) {
+                        try {
+                          // Try to call with two parameters
+                          widget.onPanelExpansionChanged(
+                              notification.isExpanded, notification.panelId);
+                        } catch (e) {
+                          // If that fails, try with one parameter
+                          try {
+                            (widget.onPanelExpansionChanged as Function(
+                                bool))(notification.isExpanded);
+                          } catch (e) {
+                            // Ignore if both fail
+                          }
+                        }
+                      }
+                      return false;
+                    },
+                    child: widget.messageContent,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.message.createdAt
+                              .toLocal()
+                              .toString()
+                              .split('.')[0],
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: widget.isUser || widget.isError
+                                ? Colors.white70
+                                : Colors.black54,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    // اضافه کردن دکمه‌های عملیات
-                    MessageActions(
-                      content: message.content,
-                      isUser: isUser,
-                      isError: isError,
-                      isLoading: isLoading,
-                      isThinking: isThinking,
-                      isImage: isImage,
-                      onRetry: isError ? onRetry : null,
-                    ),
-                  ],
-                ),
-              ],
+                      // اضافه کردن دکمه‌های عملیات
+                      MessageActions(
+                        content: widget.message.content,
+                        isUser: widget.isUser,
+                        isError: widget.isError,
+                        isLoading: widget.isLoading,
+                        isThinking: widget.isThinking,
+                        isImage: widget.isImage,
+                        onRetry: widget.isError ? widget.onRetry : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

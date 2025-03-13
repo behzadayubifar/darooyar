@@ -16,6 +16,11 @@ class ChatListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Forzar la actualización cuando se navega explícitamente a esta pantalla
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(chatListProvider);
+    });
+
     // Redirect to the stateful version
     return const ChatListScreenWithRefresh();
   }
@@ -43,7 +48,13 @@ class _ChatListScreenWithRefreshState
 
     // Refresh chat list when screen is first shown (فقط یک بار هنگام شروع)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshChatList();
+      // Solo actualizamos si no se ha cargado datos antes
+      if (!_hasLoadedDataOnce) {
+        _hasLoadedDataOnce = true;
+        // Invalidate the provider to ensure fresh data
+        ref.invalidate(chatListProvider);
+        _refreshChatList();
+      }
     });
   }
 
@@ -55,22 +66,36 @@ class _ChatListScreenWithRefreshState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // هیچ کاری انجام نده - به‌روزرسانی خودکار غیرفعال شد
-    // به‌روزرسانی فقط زمانی انجام می‌شود که کاربر صراحتاً درخواست کند (با pull-to-refresh)
+    // Ya no actualizamos automáticamente cuando la app vuelve del segundo plano
+    // Esto evita actualizaciones innecesarias cuando se baja la barra de notificaciones
+    // o cuando la app vuelve del segundo plano
+
+    // Solo registramos el cambio de estado para depuración
+    AppLogger.d('App lifecycle state changed to: $state');
   }
 
-  // متغیرهای مورد نیاز - فقط برای به‌روزرسانی‌های دستی استفاده می‌شود
+  // Flag to track if we've added the callback
+  bool _hasAddedCallback = false;
+
+  // Flag to track if we've already loaded data once
+  bool _hasLoadedDataOnce = false;
+
+  // Track last refresh time to prevent too frequent refreshes
   DateTime _lastRefreshTime = DateTime.now();
 
   Future<void> _refreshChatList() async {
     // Check if user is authenticated before refreshing
     final authState = ref.read(authStateProvider);
     if (authState.hasValue && authState.valueOrNull != null) {
-      // به‌روزرسانی زمان آخرین به‌روزرسانی
+      // Update last refresh time
       _lastRefreshTime = DateTime.now();
 
-      // Show a loading indicator
-      if (mounted) {
+      // Solo mostramos el indicador de carga si es una actualización manual
+      // (por ejemplo, cuando el usuario hace pull-to-refresh)
+      bool isManualRefresh =
+          StackTrace.current.toString().contains('RefreshIndicator');
+
+      if (isManualRefresh && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('در حال بارگذاری گفتگوها...'),
@@ -79,10 +104,11 @@ class _ChatListScreenWithRefreshState
         );
       }
 
+      // Cargar los chats
       await ref.read(chatListProvider.notifier).loadChats();
 
-      // Provide feedback on completion
-      if (mounted) {
+      // Solo mostramos feedback de finalización si fue una actualización manual
+      if (isManualRefresh && mounted) {
         // Check the state to see if there was an error
         final state = ref.read(chatListProvider);
         if (state is AsyncError) {
@@ -613,5 +639,32 @@ class _ChatListScreenWithRefreshState
         ],
       ),
     );
+  }
+
+  // Add a method to handle focus changes
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check if this screen is currently focused
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      // Only add the callback once
+      if (!_hasAddedCallback) {
+        route.addScopedWillPopCallback(() async {
+          // Will be called when navigating back to this screen
+          return true;
+        });
+        _hasAddedCallback = true;
+      }
+
+      // Solo actualizamos la primera vez que se muestra la pantalla
+      // o cuando se navega explícitamente a ella desde otra pantalla
+      if (route.isCurrent && !_hasLoadedDataOnce) {
+        // Refresh data when the screen becomes visible for the first time
+        _hasLoadedDataOnce = true;
+        ref.invalidate(chatListProvider);
+        _refreshChatList();
+      }
+    }
   }
 }

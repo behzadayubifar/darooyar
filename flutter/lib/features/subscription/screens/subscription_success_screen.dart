@@ -7,7 +7,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../providers/subscription_providers.dart';
 import '../providers/subscription_provider.dart';
 
-class SubscriptionSuccessScreen extends ConsumerWidget {
+class SubscriptionSuccessScreen extends ConsumerStatefulWidget {
   final Plan plan;
   final VoidCallback onContinue;
 
@@ -18,50 +18,113 @@ class SubscriptionSuccessScreen extends ConsumerWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SubscriptionSuccessScreen> createState() =>
+      _SubscriptionSuccessScreenState();
+}
+
+class _SubscriptionSuccessScreenState
+    extends ConsumerState<SubscriptionSuccessScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: SafeArea(
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDarkMode
+                  ? [Colors.blueGrey.shade900, Colors.black]
+                  : [Colors.blue.shade50, Colors.white],
+            ),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Success animation
-              Lottie.asset(
-                'assets/animations/success.json',
-                width: 200,
-                height: 200,
-                repeat: false,
+              AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: 1.0 + 0.1 * _animationController.value,
+                    child: child,
+                  );
+                },
+                child: Lottie.asset(
+                  'assets/animations/success.json',
+                  width: 200,
+                  height: 200,
+                  repeat: false,
+                ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-              // Congratulations text
-              Text(
-                'تبریک! 🎉',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                    ),
+              // Congratulations text with animation
+              SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.5),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                  parent: _animationController,
+                  curve: Curves.elasticOut,
+                )),
+                child: Text(
+                  'تبریک! 🎉',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                ),
               ),
 
               const SizedBox(height: 16),
 
-              Text(
-                'اشتراک شما با موفقیت فعال شد',
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
+              FadeTransition(
+                opacity: _animationController,
+                child: Text(
+                  'اشتراک شما با موفقیت فعال شد',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
               ),
 
               const SizedBox(height: 32),
 
               // Plan details card
               Card(
-                elevation: 4,
+                elevation: 8,
+                shadowColor: Theme.of(context).primaryColor.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Theme.of(context).primaryColor.withOpacity(0.2),
+                    width: 1,
+                  ),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -91,33 +154,33 @@ class SubscriptionSuccessScreen extends ConsumerWidget {
                       _buildDetailRow(
                         context,
                         'نام پلن:',
-                        plan.title,
+                        widget.plan.title,
                       ),
                       _buildDetailRow(
                         context,
                         'قیمت:',
-                        '${NumberFormatter.formatPriceInThousands(plan.price)} تومان',
+                        '${NumberFormatter.formatPriceInThousands(widget.plan.price)} تومان',
                       ),
-                      if (plan.durationDays != null)
+                      if (widget.plan.durationDays != null)
                         _buildDetailRow(
                           context,
                           'مدت زمان:',
-                          plan.durationDays == 30
+                          widget.plan.durationDays == 30
                               ? '۱ ماه'
-                              : plan.durationDays == 365
+                              : widget.plan.durationDays == 365
                                   ? '۱ سال'
-                                  : '${plan.durationDays} روز',
+                                  : '${widget.plan.durationDays} روز',
                         ),
-                      if (plan.maxUses != null)
+                      if (widget.plan.maxUses != null)
                         _buildDetailRow(
                           context,
                           'تعداد استفاده:',
-                          '${plan.maxUses} بار',
+                          '${widget.plan.maxUses} بار',
                         ),
                       _buildDetailRow(
                         context,
                         'نوع پلن:',
-                        _getPlanTypeText(plan.planType),
+                        _getPlanTypeText(widget.plan.planType),
                       ),
                     ],
                   ),
@@ -126,7 +189,7 @@ class SubscriptionSuccessScreen extends ConsumerWidget {
 
               const SizedBox(height: 32),
 
-              // Continue button
+              // Continue button with improved visibility in dark mode
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -138,19 +201,24 @@ class SubscriptionSuccessScreen extends ConsumerWidget {
                     ref.read(authStateProvider.notifier).refreshUser();
 
                     // Call the original onContinue callback
-                    onContinue();
+                    widget.onContinue();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: isDarkMode
+                        ? Colors.white
+                        : Theme.of(context).primaryColor,
+                    foregroundColor: isDarkMode
+                        ? Theme.of(context).primaryColor
+                        : Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 4,
                   ),
                   child: const Text(
                     'ادامه',
-                    style: TextStyle(fontSize: 16),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

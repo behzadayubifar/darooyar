@@ -6,12 +6,42 @@ import '../../../../core/utils/responsive_size.dart';
 // Create a notification for panel expansion state changes
 class ExpandablePanelExpansionNotification extends Notification {
   final bool isExpanded;
+  final String panelId;
 
-  ExpandablePanelExpansionNotification(this.isExpanded);
+  ExpandablePanelExpansionNotification(this.isExpanded, this.panelId);
+}
+
+// Static map to keep track of all expandable panels
+class ExpandablePanelRegistry {
+  static final Map<String, _ExpandablePanelState> _panels = {};
+
+  static void register(String id, _ExpandablePanelState state) {
+    _panels[id] = state;
+  }
+
+  static void unregister(String id) {
+    _panels.remove(id);
+  }
+
+  static void collapseAll() {
+    for (final state in _panels.values) {
+      state._forceCollapse();
+    }
+  }
 }
 
 // Notification for collapsing all panels
-class CollapseAllPanelsNotification extends Notification {}
+class CollapseAllPanelsNotification extends Notification {
+  // Add a timestamp to ensure each notification is unique
+  final DateTime timestamp = DateTime.now();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is CollapseAllPanelsNotification;
+
+  @override
+  int get hashCode => timestamp.hashCode;
+}
 
 class ExpandablePanel extends StatefulWidget {
   final String title;
@@ -20,7 +50,8 @@ class ExpandablePanel extends StatefulWidget {
   final IconData icon;
   final bool initiallyExpanded;
   final double? width;
-  final Function(bool)? onExpansionChanged;
+  final Function(bool, String)? onExpansionChanged;
+  final String? id;
 
   const ExpandablePanel({
     Key? key,
@@ -31,6 +62,7 @@ class ExpandablePanel extends StatefulWidget {
     this.initiallyExpanded = false,
     this.width,
     this.onExpansionChanged,
+    this.id,
   }) : super(key: key);
 
   @override
@@ -44,6 +76,7 @@ class _ExpandablePanelState extends State<ExpandablePanel>
   late Animation<double> _heightFactor;
   bool _isExpanded = false;
   final GlobalKey _panelKey = GlobalKey();
+  late String _panelId;
 
   @override
   void initState() {
@@ -52,19 +85,57 @@ class _ExpandablePanelState extends State<ExpandablePanel>
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _heightFactor = _controller.drive(CurveTween(curve: Curves.easeIn));
-    _iconTurns = _controller.drive(Tween<double>(begin: 0.0, end: 0.5)
-        .chain(CurveTween(curve: Curves.easeIn)));
+    _iconTurns = _controller.drive(
+      Tween<double>(begin: 0.0, end: 0.5).chain(
+        CurveTween(curve: Curves.fastOutSlowIn),
+      ),
+    );
+    _heightFactor = _controller.drive(
+      CurveTween(curve: Curves.easeIn),
+    );
 
-    final savedState =
-        PageStorage.of(context).readState(context, identifier: widget.title);
-    _isExpanded = savedState ?? widget.initiallyExpanded;
+    // Generate a unique ID for this panel
+    _panelId =
+        widget.id ?? '${widget.title}_${DateTime.now().millisecondsSinceEpoch}';
 
-    if (_isExpanded) _controller.value = 1.0;
+    // Register this panel with the registry
+    ExpandablePanelRegistry.register(_panelId, this);
+
+    // Check if initially expanded
+    _isExpanded = PageStorage.of(context).readState(
+          context,
+          identifier: widget.title,
+        ) as bool? ??
+        widget.initiallyExpanded;
+
+    if (_isExpanded) {
+      _controller.value = 1.0;
+    }
+
+    // Add a listener to handle global collapse notifications
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Register for collapse all notifications at top level
+      NotificationListener<CollapseAllPanelsNotification>(
+        onNotification: (notification) {
+          if (_isExpanded) {
+            _forceCollapse();
+          }
+          return false;
+        },
+        child: const SizedBox(), // Dummy child
+      );
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   @override
   void dispose() {
+    // Unregister this panel when disposed
+    ExpandablePanelRegistry.unregister(_panelId);
     _controller.dispose();
     super.dispose();
   }
@@ -76,12 +147,17 @@ class _ExpandablePanelState extends State<ExpandablePanel>
         _controller.forward();
         // Notify parent when panel is expanded
         if (widget.onExpansionChanged != null) {
-          widget.onExpansionChanged!(true);
+          widget.onExpansionChanged!(true, widget.id ?? widget.title);
         }
         // Send notification about expansion state change
-        ExpandablePanelExpansionNotification(true).dispatch(context);
+        ExpandablePanelExpansionNotification(true, widget.id ?? widget.title)
+            .dispatch(context);
       } else {
         _controller.reverse();
+        // Notify parent when panel is collapsed
+        if (widget.onExpansionChanged != null) {
+          widget.onExpansionChanged!(false, widget.id ?? widget.title);
+        }
       }
       PageStorage.of(context)
           .writeState(context, _isExpanded, identifier: widget.title);
@@ -93,7 +169,37 @@ class _ExpandablePanelState extends State<ExpandablePanel>
     if (_isExpanded) {
       setState(() {
         _isExpanded = false;
-        _controller.reverse();
+        _controller.reverse().then((_) {
+          // Ensure the state is updated after animation completes
+          if (mounted) {
+            setState(() {});
+          }
+        });
+
+        // Notify parent when panel is collapsed
+        if (widget.onExpansionChanged != null) {
+          widget.onExpansionChanged!(false, widget.id ?? widget.title);
+        }
+
+        // Update storage
+        PageStorage.of(context)
+            .writeState(context, false, identifier: widget.title);
+      });
+    }
+  }
+
+  // Force collapse without animation - for emergency use
+  void _forceCollapse() {
+    if (_isExpanded && mounted) {
+      _controller.value = 0.0; // Immediately set to collapsed state
+      setState(() {
+        _isExpanded = false;
+        // Notify parent when panel is collapsed
+        if (widget.onExpansionChanged != null) {
+          widget.onExpansionChanged!(false, widget.id ?? widget.title);
+        }
+
+        // Update storage
         PageStorage.of(context)
             .writeState(context, false, identifier: widget.title);
       });
@@ -271,8 +377,12 @@ class _ExpandablePanelState extends State<ExpandablePanel>
     // Wrap with NotificationListener to listen for CollapseAllPanelsNotification
     return NotificationListener<CollapseAllPanelsNotification>(
       onNotification: (notification) {
-        _collapse();
-        return false; // Allow the notification to continue to be dispatched to further ancestors
+        // Collapse this panel when the notification is received
+        if (_isExpanded) {
+          _forceCollapse(); // Call directly without post-frame callback for immediate effect
+        }
+        // Return false to allow the notification to continue to be dispatched to further ancestors
+        return false;
       },
       child: AnimatedBuilder(
         animation: _controller.view,

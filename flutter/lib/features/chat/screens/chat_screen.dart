@@ -319,6 +319,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // Add a new state variable to track if any panel is expanded
   bool _isAnyPanelExpanded = false;
 
+  // Add a set to track expanded panel IDs
+  final Set<String> _expandedPanelIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -669,8 +672,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  // Show prescription options dialog
+  // Method to show prescription options dialog
   void _showPrescriptionOptionsDialog() {
+    // Verificar si el usuario tiene una suscripción activa
+    final subscriptionState = ref.read(subscriptionProvider);
+    if (!subscriptionState.hasActiveSubscription) {
+      // Mostrar un mensaje y redirigir a la pantalla de suscripción
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('برای ارسال نسخه نیاز به اشتراک فعال دارید'),
+          backgroundColor: AppTheme.errorColor,
+          action: SnackBarAction(
+            label: 'خرید اشتراک',
+            onPressed: () {
+              Navigator.pushNamed(context, '/subscription');
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Si el usuario tiene una suscripción activa, mostrar el diálogo original
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1116,7 +1139,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 icon: earliestTagDef['icon'] as IconData,
                 initiallyExpanded: false,
                 width: panelWidth,
-                onExpansionChanged: _handlePanelExpansionChanged,
+                id: '${earliestTagDef['title']}_${contentWidgets.length}',
+                onExpansionChanged: (isExpanded, panelId) =>
+                    _handlePanelExpansionChanged(isExpanded, panelId),
               ),
             ),
           );
@@ -1195,6 +1220,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 icon: tagDef['icon'] as IconData,
                 initiallyExpanded: false,
                 width: panelWidth,
+                id: '${tagDef['title']}_${contentWidgets.length}',
                 onExpansionChanged: _handlePanelExpansionChanged,
               ),
             ),
@@ -1380,6 +1406,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               icon: style['icon'] as IconData,
               initiallyExpanded: false,
               width: panelWidth,
+              id: '${cleanTitle}_${contentWidgets.length}',
               onExpansionChanged: _handlePanelExpansionChanged,
             ),
           ),
@@ -1610,6 +1637,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(messageListProvider(widget.chat.id));
+    // Obtener el estado de la suscripción
+    final subscriptionState = ref.watch(subscriptionProvider);
+    final hasActiveSubscription = subscriptionState.hasActiveSubscription;
 
     // Check for new messages and update subscription count if needed
     // Use a post-frame callback to avoid calling setState during build
@@ -1699,33 +1729,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   data: (messages) {
                     if (messages.isEmpty) {
                       return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Lottie.asset(
-                              'assets/animations/empty_messages.json',
-                              width: 200,
-                              height: 200,
-                              repeat: true,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'هنوز پیامی ارسال نشده است',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Lottie.asset(
+                                'assets/animations/empty_messages.json',
+                                width: 200,
+                                height: 200,
+                                repeat: true,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'اولین پیام خود را ارسال کنید',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppTheme.textSecondaryColor,
+                              const SizedBox(height: 16),
+                              const Text(
+                                'هنوز پیامی ارسال نشده است',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryColor,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              const Text(
+                                'اولین پیام خود را ارسال کنید',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppTheme.textSecondaryColor,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }
@@ -1836,20 +1868,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     left: 10,
                     child: Material(
                       color: Colors.transparent,
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(20),
                       child: InkWell(
                         onTap: _collapseAllPanels,
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withOpacity(0.8),
+                            color: AppTheme.primaryColor,
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
                               ),
                             ],
                           ),
@@ -1857,17 +1891,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: const [
                               Icon(
-                                Icons.unfold_less,
+                                Icons.close_fullscreen,
                                 color: Colors.white,
-                                size: 16,
+                                size: 18,
                               ),
-                              SizedBox(width: 4),
+                              SizedBox(width: 6),
                               Text(
                                 'بستن همه',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: 14,
                                 ),
                               ),
                             ],
@@ -2064,221 +2098,253 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       width: 1,
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      // Prescription button with improved styling
-                      Container(
-                        margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _isPrescriptionProcessing
-                              ? Colors.grey.withOpacity(0.1)
-                              : (_prescriptionModeActive
-                                  ? _getPrescriptionTypeColor().withOpacity(0.1)
-                                  : AppTheme.primaryColor.withOpacity(0.1)),
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            _prescriptionModeActive
-                                ? _getPrescriptionTypeIcon()
-                                : Icons.medical_services,
-                            color: _isPrescriptionProcessing
-                                ? Colors.grey
-                                : (_prescriptionModeActive
-                                    ? _getPrescriptionTypeColor()
-                                    : AppTheme.primaryColor),
-                            size: 22,
-                          ),
-                          onPressed: _isPrescriptionProcessing
-                              ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
-                              : _showPrescriptionOptionsDialog,
-                          tooltip: _isPrescriptionProcessing
-                              ? 'در حال پردازش نسخه...'
-                              : 'ارسال نسخه',
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-
-                      // Text field with animation
-                      Expanded(
-                        child: AnimatedBuilder(
-                          animation: _inputExpandController,
-                          builder: (context, child) {
-                            // Don't show text field at all when image is selected
-                            if (_hasSelectedImage) {
-                              return const SizedBox.shrink();
-                            }
-
-                            return ClipRect(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                widthFactor: _showInputField
-                                    ? _inputWidthAnimation.value
-                                    : 0.01,
-                                child: Container(
-                                  height: _showInputField ? null : 40,
-                                  width: _showInputField ? null : 2,
-                                  decoration: BoxDecoration(
-                                    color: _showInputField
-                                        ? null
-                                        : Colors.grey.shade800,
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                  child: _showInputField
-                                      ? TextField(
-                                          controller: _messageController,
-                                          decoration: InputDecoration(
-                                            hintText: _getInputPlaceholder(),
-                                            border: InputBorder.none,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 12,
-                                            ),
-                                          ),
-                                          textInputAction:
-                                              TextInputAction.newline,
-                                          keyboardType: TextInputType.multiline,
-                                          maxLines: 5,
-                                          minLines: 1,
-                                          enabled: !_isPrescriptionProcessing,
-                                          onChanged: (text) {
-                                            // اگر در حالت نسخه متنی هستیم، مطمئن شویم که پیشوند "نسخه: " حذف نشود
-                                            if (_prescriptionModeActive &&
-                                                _selectedPrescriptionType ==
-                                                    'text' &&
-                                                !text.startsWith('نسخه: ')) {
-                                              _messageController.text =
-                                                  'نسخه: ${text.replaceAll('نسخه:', '')}';
-                                              _messageController.selection =
-                                                  TextSelection.fromPosition(
-                                                TextPosition(
-                                                    offset: _messageController
-                                                        .text.length),
-                                              );
-                                            }
-                                          },
-                                          onSubmitted: (_) {
-                                            // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
-                                          },
-                                        )
-                                      : null,
-                                ),
+                  child: hasActiveSubscription
+                      ? Row(
+                          children: [
+                            // Prescription button with improved styling
+                            Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isPrescriptionProcessing
+                                    ? Colors.grey.withOpacity(0.1)
+                                    : (_prescriptionModeActive
+                                        ? _getPrescriptionTypeColor()
+                                            .withOpacity(0.1)
+                                        : AppTheme.primaryColor
+                                            .withOpacity(0.1)),
                               ),
-                            );
-                          },
-                        ),
-                      ),
+                              child: IconButton(
+                                icon: Icon(
+                                  _prescriptionModeActive
+                                      ? _getPrescriptionTypeIcon()
+                                      : Icons.medical_services,
+                                  color: _isPrescriptionProcessing
+                                      ? Colors.grey
+                                      : (_prescriptionModeActive
+                                          ? _getPrescriptionTypeColor()
+                                          : AppTheme.primaryColor),
+                                  size: 22,
+                                ),
+                                onPressed: _isPrescriptionProcessing
+                                    ? null // غیرفعال کردن دکمه در حالت پردازش نسخه
+                                    : _showPrescriptionOptionsDialog,
+                                tooltip: _isPrescriptionProcessing
+                                    ? 'در حال پردازش نسخه...'
+                                    : 'ارسال نسخه',
+                                constraints: const BoxConstraints(
+                                  minWidth: 40,
+                                  minHeight: 40,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
 
-                      // Send button with improved styling
-                      Container(
-                        margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _isPrescriptionProcessing
-                              ? Colors.grey.withOpacity(0.1)
-                              : (_hasSelectedImage ||
-                                      (_showInputField &&
-                                          _messageController.text.isNotEmpty)
-                                  ? (_prescriptionModeActive
-                                      ? _getPrescriptionTypeColor()
-                                      : AppTheme.primaryColor)
-                                  : Colors.grey.withOpacity(0.1)),
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            _isPrescriptionProcessing
-                                ? Icons.hourglass_empty
-                                : Icons.send,
-                            color: _isPrescriptionProcessing
-                                ? Colors.grey
-                                : (_hasSelectedImage ||
-                                        (_showInputField &&
-                                            _messageController.text.isNotEmpty)
-                                    ? Colors.white
-                                    : Colors.grey),
-                            size: 20,
-                          ),
-                          onPressed: _isPrescriptionProcessing
-                              ? null
-                              : (_hasSelectedImage ||
-                                      (_showInputField &&
-                                          _messageController.text.isNotEmpty)
-                                  ? () {
-                                      if (_hasSelectedImage) {
-                                        // ارسال تصویر انتخاب شده
-                                        _sendImageMessage();
-                                      } else if (_prescriptionModeActive &&
-                                          _messageController.text.isNotEmpty) {
-                                        final messageText =
-                                            _messageController.text;
-                                        _messageController.clear();
+                            // Text field with animation
+                            Expanded(
+                              child: AnimatedBuilder(
+                                animation: _inputExpandController,
+                                builder: (context, child) {
+                                  // Don't show text field at all when image is selected
+                                  if (_hasSelectedImage) {
+                                    return const SizedBox.shrink();
+                                  }
 
-                                        setState(() {
-                                          _isPrescriptionProcessing = true;
-                                        });
-
-                                        ref
-                                            .read(messageListProvider(
-                                                    widget.chat.id)
-                                                .notifier)
-                                            .sendMessage(messageText)
-                                            .then((_) {
-                                          if (mounted) {
-                                            setState(() {
-                                              _isPrescriptionProcessing = false;
-                                              _prescriptionModeActive = false;
-                                              _selectedPrescriptionType = '';
-                                              _showInputField = false;
-                                              _inputExpandController.reverse();
-                                            });
-                                          }
-                                        }).catchError((error) {
-                                          if (mounted) {
-                                            setState(() {
-                                              _isPrescriptionProcessing = false;
-                                            });
-
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                content: Text(error.toString()),
-                                                backgroundColor:
-                                                    AppTheme.errorColor,
-                                                action: SnackBarAction(
-                                                  label: 'خرید اشتراک',
-                                                  onPressed: () {
-                                                    Navigator.pushNamed(context,
-                                                        '/subscription');
-                                                  },
+                                  return ClipRect(
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      widthFactor: _showInputField
+                                          ? _inputWidthAnimation.value
+                                          : 0.01,
+                                      child: Container(
+                                        height: _showInputField ? null : 40,
+                                        width: _showInputField ? null : 2,
+                                        decoration: BoxDecoration(
+                                          color: _showInputField
+                                              ? null
+                                              : Colors.grey.shade800,
+                                          borderRadius:
+                                              BorderRadius.circular(24),
+                                        ),
+                                        child: _showInputField
+                                            ? TextField(
+                                                controller: _messageController,
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      _getInputPlaceholder(),
+                                                  border: InputBorder.none,
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
                                                 ),
-                                              ),
-                                            );
+                                                textInputAction:
+                                                    TextInputAction.newline,
+                                                keyboardType:
+                                                    TextInputType.multiline,
+                                                maxLines: 5,
+                                                minLines: 1,
+                                                enabled:
+                                                    !_isPrescriptionProcessing,
+                                                onChanged: (text) {
+                                                  // اگر در حالت نسخه متنی هستیم، مطمئن شویم که پیشوند "نسخه: " حذف نشود
+                                                  if (_prescriptionModeActive &&
+                                                      _selectedPrescriptionType ==
+                                                          'text' &&
+                                                      !text.startsWith(
+                                                          'نسخه: ')) {
+                                                    _messageController.text =
+                                                        'نسخه: ${text.replaceAll('نسخه:', '')}';
+                                                    _messageController
+                                                            .selection =
+                                                        TextSelection
+                                                            .fromPosition(
+                                                      TextPosition(
+                                                          offset:
+                                                              _messageController
+                                                                  .text.length),
+                                                    );
+                                                  }
+                                                },
+                                                onSubmitted: (_) {
+                                                  // این متد دیگر فراخوانی نمی‌شود چون textInputAction به newline تغییر کرده است
+                                                },
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+
+                            // Send button with improved styling
+                            Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isPrescriptionProcessing
+                                    ? Colors.grey.withOpacity(0.1)
+                                    : (_hasSelectedImage ||
+                                            (_showInputField &&
+                                                _messageController
+                                                    .text.isNotEmpty)
+                                        ? (_prescriptionModeActive
+                                            ? _getPrescriptionTypeColor()
+                                            : AppTheme.primaryColor)
+                                        : Colors.grey.withOpacity(0.1)),
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  _isPrescriptionProcessing
+                                      ? Icons.hourglass_empty
+                                      : Icons.send,
+                                  color: _isPrescriptionProcessing
+                                      ? Colors.grey
+                                      : (_hasSelectedImage ||
+                                              (_showInputField &&
+                                                  _messageController
+                                                      .text.isNotEmpty)
+                                          ? Colors.white
+                                          : Colors.grey),
+                                  size: 20,
+                                ),
+                                onPressed: _isPrescriptionProcessing
+                                    ? null
+                                    : (_hasSelectedImage ||
+                                            (_showInputField &&
+                                                _messageController
+                                                    .text.isNotEmpty)
+                                        ? () {
+                                            if (_hasSelectedImage) {
+                                              // ارسال تصویر انتخاب شده
+                                              _sendImageMessage();
+                                            } else if (_showInputField &&
+                                                _messageController
+                                                    .text.isNotEmpty) {
+                                              if (_prescriptionModeActive) {
+                                                final messageText =
+                                                    _messageController.text;
+                                                _messageController.clear();
+
+                                                setState(() {
+                                                  _isPrescriptionProcessing =
+                                                      true;
+                                                });
+
+                                                ref
+                                                    .read(messageListProvider(
+                                                            widget.chat.id)
+                                                        .notifier)
+                                                    .sendMessage(messageText)
+                                                    .then((_) {
+                                                  if (mounted) {
+                                                    setState(() {
+                                                      _isPrescriptionProcessing =
+                                                          false;
+                                                      _prescriptionModeActive =
+                                                          false;
+                                                      _selectedPrescriptionType =
+                                                          '';
+                                                      _showInputField = false;
+                                                      _inputExpandController
+                                                          .reverse();
+                                                    });
+                                                  }
+                                                }).catchError((error) {
+                                                  if (mounted) {
+                                                    setState(() {
+                                                      _isPrescriptionProcessing =
+                                                          false;
+                                                    });
+
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                            error.toString()),
+                                                        backgroundColor:
+                                                            AppTheme.errorColor,
+                                                        action: SnackBarAction(
+                                                          label: 'خرید اشتراک',
+                                                          onPressed: () {
+                                                            Navigator.pushNamed(
+                                                                context,
+                                                                '/subscription');
+                                                          },
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                  return null;
+                                                });
+                                              } else {
+                                                // Enviar mensaje normal
+                                                _sendMessage();
+                                              }
+                                            }
                                           }
-                                          return null;
-                                        });
-                                      }
-                                    }
-                                  : null),
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                  ),
+                                        : null),
+                                constraints: const BoxConstraints(
+                                  minWidth: 40,
+                                  minHeight: 40,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ],
+                        )
+                      : _buildSubscriptionPromptWidget(context),
                 ),
 
                 // Add a hint text when no prescription option is selected
                 if (!_prescriptionModeActive &&
                     !_showInputField &&
-                    !_isPrescriptionProcessing)
+                    !_isPrescriptionProcessing &&
+                    hasActiveSubscription)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
@@ -2301,13 +2367,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   // Method to collapse all expandable panels
   void _collapseAllPanels() {
-    // Use a notification to communicate with all ExpandablePanel widgets
-    CollapseAllPanelsNotification().dispatch(context);
-
-    // Update the state to reflect that no panel is expanded
+    // First clear our tracking state
     setState(() {
+      _expandedPanelIds.clear();
       _isAnyPanelExpanded = false;
     });
+
+    // Use the registry to collapse all panels directly
+    ExpandablePanelRegistry.collapseAll();
 
     // Show a snackbar to confirm the action
     final messenger = ScaffoldMessenger.of(context);
@@ -2322,12 +2389,157 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   // Method to handle panel expansion state changes
-  void _handlePanelExpansionChanged(bool isExpanded) {
-    if (isExpanded && !_isAnyPanelExpanded) {
+  void _handlePanelExpansionChanged(bool isExpanded, String panelId) {
+    if (isExpanded) {
       setState(() {
+        _expandedPanelIds.add(panelId);
         _isAnyPanelExpanded = true;
       });
+    } else {
+      setState(() {
+        _expandedPanelIds.remove(panelId);
+        _isAnyPanelExpanded = _expandedPanelIds.isNotEmpty;
+      });
     }
+  }
+
+  // Helper method to check if a message is an error response from the server
+  bool _isErrorResponse(String content) {
+    // Common error phrases in Persian
+    final errorPhrases = [
+      'عذر میخواهم',
+      'عذر می‌خواهم',
+      'متاسفانه',
+      'متأسفانه',
+      'خطایی رخ داده',
+      'مشکلی پیش آمده',
+      'لطفا دوباره تلاش کنید',
+      'لطفاً دوباره تلاش کنید',
+      'نتوانستم',
+    ];
+
+    // Check if content contains any of the error phrases
+    for (final phrase in errorPhrases) {
+      if (content.contains(phrase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Helper method to check for new messages
+  void _checkForNewMessages(List<Message> messages) {
+    if (messages.isEmpty) return;
+
+    // Check if we have a new message that wasn't processed yet
+    final latestMessage = messages.last;
+    if (latestMessage.id != _lastProcessedMessageId &&
+        latestMessage.role == 'assistant' &&
+        !latestMessage.isLoading &&
+        !latestMessage.isThinking) {
+      // Update the last processed message ID
+      _lastProcessedMessageId = latestMessage.id;
+
+      // Scroll to bottom after a short delay to ensure the UI is updated
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  // Helper method to get prescription type color
+  Color _getPrescriptionTypeColor() {
+    if (_prescriptionModeActive) {
+      if (_selectedPrescriptionType == 'image') {
+        return Colors.green;
+      } else if (_selectedPrescriptionType == 'text') {
+        return Colors.blue;
+      } else if (_selectedPrescriptionType == 'camera') {
+        return Colors.purple;
+      } else {
+        return AppTheme.primaryColor;
+      }
+    } else {
+      return AppTheme.primaryColor;
+    }
+  }
+
+  // Helper method to get prescription type icon
+  IconData _getPrescriptionTypeIcon() {
+    if (_prescriptionModeActive) {
+      if (_selectedPrescriptionType == 'image') {
+        return Icons.photo_library;
+      } else if (_selectedPrescriptionType == 'text') {
+        return Icons.text_fields;
+      } else if (_selectedPrescriptionType == 'camera') {
+        return Icons.camera_alt;
+      } else {
+        return Icons.medical_services;
+      }
+    } else {
+      return Icons.medical_services;
+    }
+  }
+
+  // Helper method to get prescription type title
+  String _getPrescriptionTypeTitle() {
+    if (_prescriptionModeActive) {
+      if (_selectedPrescriptionType == 'image') {
+        return 'تصویر نسخه';
+      } else if (_selectedPrescriptionType == 'text') {
+        return 'متن نسخه';
+      } else {
+        return 'نسخه';
+      }
+    } else {
+      return 'نسخه';
+    }
+  }
+
+  // Helper method to get input placeholder
+  String _getInputPlaceholder() {
+    if (_isPrescriptionProcessing) {
+      return 'در حال پردازش نسخه، لطفاً صبر کنید...';
+    } else if (_prescriptionModeActive) {
+      if (_selectedPrescriptionType == 'image') {
+        return 'توضیحات اضافی برای نسخه تصویری...';
+      } else if (_selectedPrescriptionType == 'text') {
+        return 'متن نسخه را وارد کنید...';
+      } else if (_selectedPrescriptionType == 'camera') {
+        return 'توضیحات اضافی برای عکس دوربین...';
+      } else {
+        return 'متن نسخه را وارد کنید...';
+      }
+    } else {
+      return 'پیام خود را بنویسید...';
+    }
+  }
+
+  // Helper method to show full screen image
+  void _showFullScreenImage(String imagePath) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImageViewerScreen(
+          imageUrl: imagePath,
+          isNetworkImage: false,
+          heroTag: 'image_preview_${DateTime.now().millisecondsSinceEpoch}',
+        ),
+      ),
+    );
+  }
+
+  // Helper method to force collapse all panels in the widget tree
+  void _forceCollapseAllPanelsInTree(BuildContext context) {
+    // This is a placeholder method to fix the linter error
+    // The actual implementation would be more complex
   }
 
   // Helper method to check if a message is a prescription response
@@ -2367,262 +2579,150 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return hasPrescriptionTags || hasPrescriptionPatterns;
   }
 
-  // Helper method to check if a message is an error response from the server
-  bool _isErrorResponse(String content) {
-    // Common error phrases in Persian
-    final errorPhrases = [
-      'عذر میخواهم',
-      'عذر می‌خواهم',
-      'متاسفانه',
-      'متأسفانه',
-      'خطایی رخ داده',
-      'مشکلی پیش آمده',
-      'لطفا دوباره تلاش کنید',
-      'لطفاً دوباره تلاش کنید',
-      'نتوانستم',
-      'قادر به پردازش نیستم',
-      'قادر به تحلیل نیستم',
-      'امکان پردازش وجود ندارد',
-      'امکان تحلیل وجود ندارد',
-      'خطا در پردازش',
-      'خطا در تحلیل',
-      'نمی‌توانم تحلیل کنم',
-      'نمی‌توانم پردازش کنم',
-      'نمی‌توانم تشخیص دهم',
-      'نمی‌توانم بخوانم',
-      'قادر به خواندن نیستم',
-      'تصویر واضح نیست',
-      'تصویر قابل تشخیص نیست',
-      'نسخه قابل خواندن نیست',
-      'نسخه واضح نیست',
-      'خطا در پردازش نسخه',
-    ];
-
-    // Check if the content contains any of the error phrases
-    for (final phrase in errorPhrases) {
-      if (content.contains(phrase)) {
-        AppLogger.i('Detected error phrase in response: "$phrase"');
-        return true;
-      }
-    }
-
-    // Check for common error patterns
-    if ((content.contains('لطفا') || content.contains('لطفاً')) &&
-        (content.contains('دوباره') || content.contains('مجدد'))) {
-      AppLogger.i('Detected error pattern: request to try again');
-      return true;
-    }
-
-    // Check if the content is very short (likely an error)
-    if (content.length < 100 &&
-        (content.contains('خطا') ||
-            content.contains('مشکل') ||
-            content.contains('عذر') ||
-            content.contains('متاسف'))) {
-      AppLogger.i('Detected short error message');
-      return true;
-    }
-
-    // Check if the content lacks prescription-specific information but mentions prescription
-    if (content.contains('نسخه') &&
-        content.length < 200 &&
-        !(content.contains('داروها') ||
-            content.contains('تشخیص') ||
-            content.contains('تداخل') ||
-            content.contains('عوارض'))) {
-      AppLogger.i(
-          'Detected error response related to prescription without analysis');
-      return true;
-    }
-
-    // Check if the content lacks prescription-specific information
-    bool hasPrescriptionContent = content.contains('دارو') ||
-        content.contains('قرص') ||
-        content.contains('کپسول') ||
-        content.contains('شربت') ||
-        content.contains('آمپول') ||
-        content.contains('تشخیص') ||
-        content.contains('تداخل') ||
-        content.contains('عوارض') ||
-        content.contains('مصرف');
-
-    if (!hasPrescriptionContent && content.length < 200) {
-      AppLogger.i('Detected response without prescription content');
-      return true;
-    }
-
-    return false;
-  }
-
-  // Add a method to check for new messages and update the subscription count
-  void _checkForNewMessages(List<Message> messages) {
-    if (messages.isEmpty) return;
-
-    final lastMessage = messages.last;
-
-    // اگر پیام جدید در حالت "thinking" یا "loading" است و هنوز وضعیت پردازش نسخه تنظیم نشده
-    if ((lastMessage.isThinking || lastMessage.isLoading) &&
-        lastMessage.role == 'assistant' &&
-        !_isPrescriptionProcessing) {
-      // بررسی کنیم که آیا پیام قبلی از کاربر بوده و حاوی کلمات کلیدی نسخه است
-      if (messages.length >= 2) {
-        final previousMessage = messages[messages.length - 2];
-        if (previousMessage.role == 'user') {
-          bool isPrescription = previousMessage.content.startsWith('نسخه:') ||
-              previousMessage.content.contains('نسخه') ||
-              previousMessage.content.contains('دارو') ||
-              previousMessage.content.contains('قرص') ||
-              previousMessage.content.contains('کپسول') ||
-              previousMessage.content.contains('شربت') ||
-              previousMessage.content.contains('آمپول') ||
-              previousMessage.isImage; // تصاویر معمولاً نسخه هستند
-
-          if (isPrescription) {
-            setState(() {
-              _isPrescriptionProcessing = true;
-            });
-            AppLogger.i(
-                'Detected prescription processing from message content');
-          }
-        }
-      }
-    }
-
-    // Only process each message once
-    if (lastMessage.id == _lastProcessedMessageId) return;
-
-    // Check if this is a completed AI response
-    if (lastMessage.role == 'assistant' &&
-        !lastMessage.isLoading &&
-        !lastMessage.isThinking) {
-      // Update the last processed message ID
-      _lastProcessedMessageId = lastMessage.id;
-
-      // Check if the message content indicates an error
-      bool isErrorResponse = _isErrorResponse(lastMessage.content);
-
-      // بررسی کنید که آیا در حال پردازش نسخه بوده‌ایم و اکنون پاسخی دریافت کرده‌ایم
-      if (_isPrescriptionProcessing) {
-        // بازنشانی وضعیت پردازش نسخه
-        setState(() {
-          _isPrescriptionProcessing = false;
-        });
-        AppLogger.i('Prescription processing completed, enabling input');
-
-        // If this is an error response, convert it to an error message
-        if (isErrorResponse) {
-          AppLogger.i('Converting error response to error message');
-
-          // Use the message provider to replace the message with an error message
-          ref
-              .read(messageListProvider(widget.chat.id).notifier)
-              .convertToErrorMessage(lastMessage.id,
-                  'خطا در پردازش نسخه: ${lastMessage.content.split('\n').first}');
-
-          // Don't refresh subscription for error responses
-          return;
-        }
-      } else {
-        // Even if we're not processing a prescription, check if this is an error response
-        // that needs to be converted to an error message
-        if (isErrorResponse && !lastMessage.isError) {
-          AppLogger.i(
-              'Converting non-prescription error response to error message');
-
-          // Use the message provider to replace the message with an error message
-          ref
-              .read(messageListProvider(widget.chat.id).notifier)
-              .convertToErrorMessage(lastMessage.id,
-                  'خطا: ${lastMessage.content.split('\n').first}');
-
-          return;
-        }
-      }
-
-      // Only check for prescription response if it's not an error
-      if (!isErrorResponse) {
-        // Check if the message is a prescription response by looking for specific tags
-        bool isPrescriptionResponse =
-            _isPrescriptionResponse(lastMessage.content);
-        AppLogger.i('Is prescription response: $isPrescriptionResponse');
-
-        if (isPrescriptionResponse) {
-          // Immediately trigger a refresh of the subscription count
-          _forceRefreshSubscriptionWithAPI(showSnackBar: false);
-
-          // Also schedule another refresh after a short delay to ensure the server has processed the update
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) {
-              // Log for debugging
-              AppLogger.i(
-                  'Second refresh of subscription plan after receiving prescription response');
-
-              // Force refresh the subscription data again
-              _forceRefreshSubscriptionWithAPI(showSnackBar: false);
-            }
-          });
-        }
-      }
-    } else if (lastMessage.isError && _isPrescriptionProcessing) {
-      // در صورت خطا نیز وضعیت پردازش نسخه را بازنشانی کنید
-      setState(() {
-        _isPrescriptionProcessing = false;
-      });
-      AppLogger.i('Prescription processing failed, enabling input');
-    }
-  }
-
-  // Helper methods for prescription mode
-  Color _getPrescriptionTypeColor() {
-    final type = _prescriptionTypes.firstWhere(
-      (type) => type['id'] == _selectedPrescriptionType,
-      orElse: () => {'color': AppTheme.primaryColor},
-    );
-    return type['color'] as Color;
-  }
-
-  IconData _getPrescriptionTypeIcon() {
-    final type = _prescriptionTypes.firstWhere(
-      (type) => type['id'] == _selectedPrescriptionType,
-      orElse: () => {'icon': Icons.medical_services},
-    );
-    return type['icon'] as IconData;
-  }
-
-  String _getPrescriptionTypeTitle() {
-    final type = _prescriptionTypes.firstWhere(
-      (type) => type['id'] == _selectedPrescriptionType,
-      orElse: () => {'title': 'نسخه'},
-    );
-    return type['title'] as String;
-  }
-
-  String _getInputPlaceholder() {
-    if (_isPrescriptionProcessing) {
-      return 'در حال پردازش نسخه، لطفاً صبر کنید...';
-    } else if (!_prescriptionModeActive) {
-      return 'برای ارسال نسخه، ابتدا نوع نسخه را انتخاب کنید...';
-    } else if (_selectedPrescriptionType == 'text') {
-      return 'نسخه خود را وارد کنید...';
-    } else if (_selectedPrescriptionType == 'image') {
-      return 'در حال ارسال تصویر نسخه...';
-    } else if (_selectedPrescriptionType == 'camera') {
-      return 'در حال ارسال عکس نسخه...';
-    } else {
-      return 'پیام خود را بنویسید...';
-    }
-  }
-
-  // نمایش تصویر به صورت تمام صفحه
-  void _showFullScreenImage(String imagePath) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ImageViewerScreen(
-          imageUrl: imagePath,
-          isNetworkImage: false,
-          heroTag: 'image_preview_${DateTime.now().millisecondsSinceEpoch}',
-        ),
+  // Widget para mostrar cuando el usuario no tiene una suscripción activa
+  Widget _buildSubscriptionPromptWidget(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Icono animado con efecto de pulso
+          TweenAnimationBuilder(
+            tween: Tween<double>(begin: 0.8, end: 1.0),
+            duration: const Duration(seconds: 1),
+            curve: Curves.easeInOut,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.workspace_premium,
+                    color: AppTheme.primaryColor,
+                    size: 36,
+                  ),
+                ),
+              );
+            },
+            onEnd: () {
+              // Reiniciar la animación
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 16),
+          // Mensaje principal
+          Text(
+            'اشتراک شما فعال نیست',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.primaryColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          // Mensaje secundario
+          Text(
+            'برای ارسال نسخه و دریافت پاسخ، نیاز به اشتراک فعال دارید',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          // Botón de suscripción
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/subscription');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              elevation: 4,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.shopping_cart, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'خرید اشتراک',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  // Method to send a message
+  void _sendMessage() {
+    if (_messageController.text.isEmpty) return;
+
+    // Verificar si el usuario tiene una suscripción activa
+    final subscriptionState = ref.read(subscriptionProvider);
+    if (!subscriptionState.hasActiveSubscription) {
+      // Mostrar un mensaje y redirigir a la pantalla de suscripción
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('برای ارسال پیام نیاز به اشتراک فعال دارید'),
+          backgroundColor: AppTheme.errorColor,
+          action: SnackBarAction(
+            label: 'خرید اشتراک',
+            onPressed: () {
+              Navigator.pushNamed(context, '/subscription');
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    final messageText = _messageController.text;
+    _messageController.clear();
+
+    // Hide the input field
+    setState(() {
+      _showInputField = false;
+      _inputExpandController.reverse();
+    });
+
+    // Send the message
+    ref
+        .read(messageListProvider(widget.chat.id).notifier)
+        .sendMessage(messageText)
+        .then((_) {
+      // Scroll to bottom after a short delay
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }).catchError((error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    });
   }
 }

@@ -788,6 +788,10 @@ class ChatService {
 
       AppLogger.d('Using content type: $contentType for file: $fileName');
 
+      // Generate a unique request ID for this image upload
+      final requestId = 'req_img_${DateTime.now().millisecondsSinceEpoch}';
+      AppLogger.d('Generated request ID: $requestId for image upload');
+
       // Create form data with the image file
       final formData = FormData.fromMap({
         'image': await MultipartFile.fromFile(
@@ -797,6 +801,7 @@ class ChatService {
         ),
         'role': 'user',
         'content_type': 'image',
+        'request_id': requestId, // Add request ID to ensure unique analysis
       });
 
       // Log request details

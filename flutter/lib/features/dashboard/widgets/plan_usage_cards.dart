@@ -70,14 +70,7 @@ class PlanUsageCards extends ConsumerWidget {
                 value: '$remainingDays روز',
                 percentage: daysPercentage,
                 icon: Icons.calendar_today,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SubscriptionScreen(),
-                    ),
-                  );
-                },
+                onTap: null,
               ),
 
             if (plan.prescriptionCount > 0)
@@ -86,14 +79,7 @@ class PlanUsageCards extends ConsumerWidget {
                 value: '$remainingUses از ${plan.prescriptionCount}',
                 percentage: usesPercentage,
                 icon: Icons.description,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SubscriptionScreen(),
-                    ),
-                  );
-                },
+                onTap: null,
               ),
 
             // Features list

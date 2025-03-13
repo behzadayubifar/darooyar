@@ -61,6 +61,47 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       return;
     }
 
+    // Show confirmation dialog before proceeding with purchase
+    final bool? confirmPurchase = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('تایید خرید اشتراک'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('آیا از خرید اشتراک ${plan.title} مطمئن هستید؟'),
+              const SizedBox(height: 8),
+              Text(
+                  'مبلغ: ${NumberFormatter.formatPriceInThousands(plan.price)} تومان'),
+              const SizedBox(height: 8),
+              Text(
+                  'اعتبار فعلی شما: ${NumberFormatter.formatPriceInThousands(user.credit)} تومان'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('انصراف'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('تایید و خرید'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmPurchase != true) {
+      return; // User canceled the purchase
+    }
+
     try {
       // Use the subscription service to purchase the plan
       final subscriptionService = ref.read(subscriptionServiceProvider);
@@ -974,11 +1015,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   // Helper method to get the appropriate price unit based on the price value
   String _getPriceUnit(double price) {
     if (price >= 1000000000) {
-      return 'میلیارد تومن';
+      return 'میلیارد';
     } else if (price >= 1000000) {
-      return 'میلیون تومن';
+      return 'میلیون';
     } else {
-      return 'هزار تومن';
+      return 'هزار';
     }
   }
 }

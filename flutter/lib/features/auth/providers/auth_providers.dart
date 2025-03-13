@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../../chat/providers/chat_providers.dart';
+import '../../chat/providers/folder_providers.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/providers/subscription_providers.dart';
 
 // Provider for the auth service
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
@@ -9,15 +13,17 @@ final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 // Provider for the current user (null if not authenticated)
 final authStateProvider =
     StateNotifierProvider<AuthStateNotifier, AsyncValue<User?>>((ref) {
-  return AuthStateNotifier(ref.watch(authServiceProvider));
+  return AuthStateNotifier(ref.watch(authServiceProvider), ref);
 });
 
 // Auth state notifier
 class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
   final AuthService _authService;
+  final Ref _ref;
   bool _isCheckingAuth = false;
 
-  AuthStateNotifier(this._authService) : super(const AsyncValue.loading()) {
+  AuthStateNotifier(this._authService, this._ref)
+      : super(const AsyncValue.loading()) {
     _checkAuth();
   }
 
@@ -73,7 +79,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
         state = AsyncValue.error(e, StackTrace.current);
 
         // After a brief delay, set to not authenticated on error
-        Future.delayed(Duration(milliseconds: 500), () {
+        Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
             state = const AsyncValue.data(null);
           }
@@ -129,6 +135,25 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
     state = const AsyncValue.loading();
     try {
       await _authService.logout();
+
+      // Clear all cached data by invalidating providers
+      // This ensures that when a new user logs in, they don't see the previous user's data
+      // Invalidate chat-related providers
+      _ref.invalidate(chatListProvider);
+
+      // Invalidate any other user-specific data providers
+      _ref.invalidate(currentPlanProvider);
+      _ref.invalidate(activeSubscriptionsProvider);
+      _ref.invalidate(userSubscriptionsProvider);
+
+      // Invalidate folder providers if they exist
+      try {
+        _ref.invalidate(folderNotifierProvider);
+      } catch (e) {
+        // Ignore if provider doesn't exist
+        debugPrint('Could not invalidate folder provider: $e');
+      }
+
       state = const AsyncValue.data(null);
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
@@ -143,7 +168,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
       debugPrint(
           'AuthStateNotifier: Auth check already in progress, refresh queued');
       // Queue a refresh after current check completes
-      Future.delayed(Duration(milliseconds: 500), () {
+      Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_isCheckingAuth) {
           _checkAuth();
         }

@@ -377,6 +377,7 @@ class StructuredMedicationInfo extends StatelessWidget {
                 color: section['color'] as Color,
                 icon: section['icon'] as IconData,
                 initiallyExpanded: section['initiallyExpanded'] as bool,
+                id: section['title'] as String,
               );
             }).toList(),
           ),

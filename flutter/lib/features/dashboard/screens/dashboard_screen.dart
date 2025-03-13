@@ -19,6 +19,7 @@ import '../../subscription/providers/subscription_providers.dart';
 import '../../subscription/screens/subscription_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/utils/number_formatter.dart';
+import 'dart:math' as Math;
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -28,15 +29,22 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   int _currentIndex = 0;
   int _currentTabIndex = 0;
   final PageController _pageController = PageController();
 
+  // Add variables to track refresh state
+  DateTime _lastRefreshTime = DateTime.now();
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
+    // Add observer to detect app lifecycle changes
+    WidgetsBinding.instance.addObserver(this);
+
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
@@ -51,13 +59,69 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         );
       }
     });
+
+    // Refresh subscription data when the dashboard is first shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshSubscriptionData();
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _pageController.dispose();
+    // Remove observer when disposing
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh data when app comes to foreground
+    if (state == AppLifecycleState.resumed) {
+      _refreshSubscriptionData();
+    }
+  }
+
+  // Add a method to handle focus changes
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check if this screen is currently focused
+    final route = ModalRoute.of(context);
+    if (route != null && route.isCurrent) {
+      // Only refresh if we haven't refreshed recently
+      final now = DateTime.now();
+      if (now.difference(_lastRefreshTime).inSeconds > 10) {
+        _refreshSubscriptionData();
+      }
+    }
+  }
+
+  // Method to refresh subscription data
+  void _refreshSubscriptionData() {
+    // Check if we're already refreshing or if it's too soon since last refresh
+    final now = DateTime.now();
+    if (_isRefreshing || now.difference(_lastRefreshTime).inSeconds < 10) {
+      return; // Skip this refresh
+    }
+
+    // Set refreshing flag and update last refresh time
+    _isRefreshing = true;
+    _lastRefreshTime = now;
+
+    // Invalidate providers to force refresh
+    ref.invalidate(activeSubscriptionsProvider);
+    ref.invalidate(userSubscriptionsProvider);
+    ref.invalidate(currentPlanProvider);
+
+    // Also refresh user data
+    ref.read(authStateProvider.notifier).refreshUser();
+
+    // Reset refreshing flag after a delay
+    Future.delayed(const Duration(seconds: 2), () {
+      _isRefreshing = false;
+    });
   }
 
   @override
@@ -212,6 +276,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               });
             } else if (index == 1) {
               // Navigate to chat history
+              // Invalidate the provider before navigation to ensure fresh data
+              ref.invalidate(chatListProvider);
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -221,6 +287,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 setState(() {
                   _currentIndex = 0;
                 });
+                // Refresh data when returning from chat list
+                _refreshSubscriptionData();
               });
             } else if (index == 2) {
               // Start new chat
@@ -522,18 +590,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     maxLines: 1,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SubscriptionScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit, size: 16),
-                  label: const Text('تغییر'),
-                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -767,12 +823,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 label: 'تاریخچه',
                 color: Colors.purple,
                 onTap: () {
+                  // Invalidate the provider before navigation to ensure fresh data
+                  ref.invalidate(chatListProvider);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const ChatListScreen(),
                     ),
-                  );
+                  ).then((_) {
+                    // Refresh data when returning from chat list
+                    _refreshSubscriptionData();
+                  });
                 },
               ),
               _buildActionButton(
@@ -931,6 +992,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _buildStatsTab() {
     final currentPlanAsync = ref.watch(currentPlanProvider);
+    // Get user chats for statistics
+    final chatsAsync = ref.watch(chatListProvider);
+    // Get user subscriptions for usage data
+    final subscriptionsAsync = ref.watch(activeSubscriptionsProvider);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -952,106 +1017,140 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             );
           }
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: CircularPercentIndicator(
-                      radius: 50.0,
-                      lineWidth: 8.0,
-                      percent: 0.7,
-                      center: const Text(
-                        "70%",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14.0),
-                      ),
-                      footer: const Padding(
-                        padding: EdgeInsets.only(top: 8.0),
-                        child: Text("گفتگوهای این ماه"),
-                      ),
-                      progressColor: Colors.blue,
-                    ),
-                  ),
-                  Expanded(
-                    child: CircularPercentIndicator(
-                      radius: 50.0,
-                      lineWidth: 8.0,
-                      percent: 0.4,
-                      center: const Text(
-                        "40%",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14.0),
-                      ),
-                      footer: const Padding(
-                        padding: EdgeInsets.only(top: 8.0),
-                        child: Text("نسخه‌های ثبت شده"),
-                      ),
-                      progressColor: Colors.green,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          // Calculate statistics based on actual data
+          return chatsAsync.when(
+            data: (chats) {
+              // Calculate chat statistics
+              final int totalChats = chats.length;
+              final int maxChatsPerMonth = 100; // Assuming a reasonable maximum
+              final double chatPercent = totalChats / maxChatsPerMonth;
+              final double chatPercentCapped = chatPercent.clamp(0.0, 1.0);
+
+              // Calculate prescription statistics
+              return subscriptionsAsync.when(
+                data: (subscriptions) {
+                  // Get the active subscription
+                  final activeSubscription =
+                      subscriptions.isNotEmpty ? subscriptions.first : null;
+
+                  // Calculate prescription usage
+                  int maxPrescriptions =
+                      plan.prescriptionCount > 0 ? plan.prescriptionCount : 100;
+                  int usedPrescriptions = 0;
+                  int remainingPrescriptions = maxPrescriptions;
+
+                  if (activeSubscription != null &&
+                      activeSubscription.remainingUses != null) {
+                    remainingPrescriptions = activeSubscription.remainingUses!;
+                    usedPrescriptions =
+                        maxPrescriptions - remainingPrescriptions;
+                  }
+
+                  final double prescriptionPercent = maxPrescriptions > 0
+                      ? usedPrescriptions / maxPrescriptions
+                      : 0.0;
+                  final double prescriptionPercentCapped =
+                      prescriptionPercent.clamp(0.0, 1.0);
+
+                  // Calculate weekly chat statistics
+                  final Map<String, int> weekdayChats =
+                      _calculateWeekdayChats(chats);
+                  // Ensure maxWeekdayChats is never zero to avoid division by zero
+                  final int maxWeekdayChats = Math.max(
+                      1,
+                      weekdayChats.values.isEmpty
+                          ? 1
+                          : weekdayChats.values
+                              .reduce((a, b) => a > b ? a : b));
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'آمار استفاده هفتگی',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: CircularPercentIndicator(
+                              radius: 50.0,
+                              lineWidth: 8.0,
+                              percent: chatPercentCapped,
+                              center: Text(
+                                "${(chatPercentCapped * 100).toInt()}%",
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.0),
+                              ),
+                              footer: const Padding(
+                                padding: EdgeInsets.only(top: 8.0),
+                                child: Text("گفتگوهای این ماه"),
+                              ),
+                              progressColor: Colors.blue,
+                            ),
+                          ),
+                          Expanded(
+                            child: CircularPercentIndicator(
+                              radius: 50.0,
+                              lineWidth: 8.0,
+                              percent: prescriptionPercentCapped,
+                              center: Text(
+                                "${(prescriptionPercentCapped * 100).toInt()}%",
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.0),
+                              ),
+                              footer: const Padding(
+                                padding: EdgeInsets.only(top: 8.0),
+                                child: Text("نسخه‌های ثبت شده"),
+                              ),
+                              progressColor: Colors.green,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      LinearPercentIndicator(
-                        lineHeight: 14.0,
-                        percent: 0.6,
-                        center: const Text(
-                          "60%",
-                          style: TextStyle(fontSize: 12.0, color: Colors.white),
+                      const SizedBox(height: 20),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'آمار استفاده هفتگی',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildWeekdayProgressBar(
+                                  weekdayChats, 'شنبه', maxWeekdayChats),
+                              const SizedBox(height: 8),
+                              _buildWeekdayProgressBar(
+                                  weekdayChats, 'یکشنبه', maxWeekdayChats),
+                              const SizedBox(height: 8),
+                              _buildWeekdayProgressBar(
+                                  weekdayChats, 'دوشنبه', maxWeekdayChats),
+                            ],
+                          ),
                         ),
-                        leading: const Text("شنبه"),
-                        trailing: const Text("۶ گفتگو"),
-                        progressColor: Colors.blue,
-                        barRadius: const Radius.circular(7),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearPercentIndicator(
-                        lineHeight: 14.0,
-                        percent: 0.3,
-                        center: const Text(
-                          "30%",
-                          style: TextStyle(fontSize: 12.0, color: Colors.white),
-                        ),
-                        leading: const Text("یکشنبه"),
-                        trailing: const Text("۳ گفتگو"),
-                        progressColor: Colors.blue,
-                        barRadius: const Radius.circular(7),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearPercentIndicator(
-                        lineHeight: 14.0,
-                        percent: 0.9,
-                        center: const Text(
-                          "90%",
-                          style: TextStyle(fontSize: 12.0, color: Colors.white),
-                        ),
-                        leading: const Text("دوشنبه"),
-                        trailing: const Text("۹ گفتگو"),
-                        progressColor: Colors.blue,
-                        barRadius: const Radius.circular(7),
                       ),
                     ],
-                  ),
+                  );
+                },
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
                 ),
-              ),
-            ],
+                error: (_, __) => const Center(
+                  child: Text('خطا در بارگیری اطلاعات اشتراک'),
+                ),
+              );
+            },
+            loading: () => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            error: (_, __) => const Center(
+              child: Text('خطا در بارگیری اطلاعات گفتگوها'),
+            ),
           );
         },
         loading: () => const Center(
@@ -1067,6 +1166,83 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // Helper method to calculate chats per weekday
+  Map<String, int> _calculateWeekdayChats(List<Chat> chats) {
+    // Initialize with default values of 0 for all days
+    final Map<String, int> weekdayChats = {
+      'شنبه': 0,
+      'یکشنبه': 0,
+      'دوشنبه': 0,
+      'سه‌شنبه': 0,
+      'چهارشنبه': 0,
+      'پنج‌شنبه': 0,
+      'جمعه': 0,
+    };
+
+    // If no chats, return the initialized map with zeros
+    if (chats.isEmpty) {
+      return weekdayChats;
+    }
+
+    // Get chats from the last week
+    final DateTime now = DateTime.now();
+    final DateTime oneWeekAgo = now.subtract(const Duration(days: 7));
+
+    for (final chat in chats) {
+      if (chat.updatedAt != null && chat.updatedAt.isAfter(oneWeekAgo)) {
+        // Convert weekday to Persian
+        final String weekday = _getWeekdayName(chat.updatedAt.weekday);
+        weekdayChats[weekday] = (weekdayChats[weekday] ?? 0) + 1;
+      }
+    }
+
+    return weekdayChats;
+  }
+
+  // Helper method to convert weekday number to Persian name
+  String _getWeekdayName(int weekday) {
+    switch (weekday) {
+      case DateTime.saturday:
+        return 'شنبه';
+      case DateTime.sunday:
+        return 'یکشنبه';
+      case DateTime.monday:
+        return 'دوشنبه';
+      case DateTime.tuesday:
+        return 'سه‌شنبه';
+      case DateTime.wednesday:
+        return 'چهارشنبه';
+      case DateTime.thursday:
+        return 'پنج‌شنبه';
+      case DateTime.friday:
+        return 'جمعه';
+      default:
+        return 'شنبه';
+    }
+  }
+
+  // Helper method to build weekday progress bars safely
+  Widget _buildWeekdayProgressBar(
+      Map<String, int> weekdayChats, String day, int maxValue) {
+    // Ensure we have a valid value and avoid division by zero
+    final int value = weekdayChats[day] ?? 0;
+    final double percent = maxValue > 0 ? value / maxValue : 0.0;
+    final int percentInt = (percent * 100).toInt();
+
+    return LinearPercentIndicator(
+      lineHeight: 14.0,
+      percent: percent,
+      center: Text(
+        "$percentInt%",
+        style: const TextStyle(fontSize: 12.0, color: Colors.white),
+      ),
+      leading: Text(day),
+      trailing: Text("$value گفتگو"),
+      progressColor: Colors.blue,
+      barRadius: const Radius.circular(7),
     );
   }
 
@@ -1138,12 +1314,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             );
           } else if (title.contains('مشاهده تاریخچه')) {
             // Navigate to chat history
+            // Invalidate the provider before navigation to ensure fresh data
+            ref.invalidate(chatListProvider);
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const ChatListScreen(),
               ),
-            );
+            ).then((_) {
+              // Refresh data when returning from chat list
+              if (mounted) {
+                _refreshSubscriptionData();
+              }
+            });
           } else if (title.contains('خرید اشتراک')) {
             // Navigate to subscription screen
             Navigator.push(

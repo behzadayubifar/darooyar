@@ -175,16 +175,29 @@ class ApiClient {
   }
 
   // Method to analyze prescription text
-  Future<Map<String, dynamic>> analyzePrescriptionText(String text) async {
+  Future<Map<String, dynamic>> analyzePrescriptionText(String text,
+      {String? requestId}) async {
     try {
       final url = Uri.parse('$baseUrl/api/analyze-prescription/text');
       log('Analyzing prescription text at: $url');
       log('Prescription text: $text');
+      if (requestId != null) {
+        log('Request ID: $requestId');
+      }
+
+      final Map<String, dynamic> requestData = {
+        'content': text,
+      };
+
+      // Add request ID if provided to ensure unique analysis
+      if (requestId != null) {
+        requestData['request_id'] = requestId;
+      }
 
       final response = await http.post(
         url,
         headers: _headers,
-        body: jsonEncode({'content': text}),
+        body: jsonEncode(requestData),
       );
 
       log('Prescription analysis response status: ${response.statusCode}');
@@ -202,10 +215,14 @@ class ApiClient {
   }
 
   // Method to analyze prescription image
-  Future<Map<String, dynamic>> analyzePrescriptionImage(File image) async {
+  Future<Map<String, dynamic>> analyzePrescriptionImage(File image,
+      {String? requestId}) async {
     try {
       final url = Uri.parse('$baseUrl/api/analyze-prescription/image');
       log('Analyzing prescription image at: $url');
+      if (requestId != null) {
+        log('Request ID: $requestId');
+      }
 
       // Determine the correct MIME type based on file extension
       final fileName = image.path.split('/').last;
@@ -222,6 +239,11 @@ class ApiClient {
       // Add authorization header if exists
       if (_headers.containsKey('Authorization')) {
         request.headers['Authorization'] = _headers['Authorization']!;
+      }
+
+      // Add request ID if provided to ensure unique analysis
+      if (requestId != null) {
+        request.fields['request_id'] = requestId;
       }
 
       request.files.add(

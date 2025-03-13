@@ -36,7 +36,7 @@ class NumberFormatter {
   }
 
   /// Formats a price in thousands of Tomans
-  /// Example: 45 -> 45 هزار تومن
+  /// Example: 45 -> 45
   static String formatPriceInThousands(dynamic price) {
     // Convert to double if it's not already
     double priceValue = double.tryParse(price.toString()) ?? 0;
@@ -44,6 +44,6 @@ class NumberFormatter {
     // Format the price without decimal places
     String formattedPrice = formatWithCommas(priceValue.toStringAsFixed(0));
 
-    return '$formattedPrice هزار تومن';
+    return formattedPrice;
   }
 }

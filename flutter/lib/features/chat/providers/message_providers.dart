@@ -7,6 +7,7 @@ import '../../../core/services/message_migration_service.dart';
 import '../../../core/utils/message_formatter.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/services/subscription_service.dart';
+import '../../subscription/providers/subscription_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../utils/message_utils.dart';
 import 'dart:io';
@@ -48,10 +49,59 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
     try {
       AppLogger.i('Sending message to chat $_chatId: $content');
 
-      // Check if user has an active subscription plan
-      final currentPlan = await _ref.read(currentPlanProvider.future);
-      if (currentPlan == null) {
-        throw Exception('برای ارسال پیام جدید نیاز به اشتراک فعال دارید');
+      // Check if this is a prescription message
+      final isPrescription = content.contains('نسخه:') ||
+          content.contains('نسخه ') ||
+          content.contains('دارو:') ||
+          content.contains('دارو ') ||
+          content.contains('قرص ') ||
+          content.contains('کپسول ') ||
+          content.contains('شربت ') ||
+          content.contains('آمپول ') ||
+          content.contains('اسپری ') ||
+          content.contains('پماد ') ||
+          content.contains('قطره ') ||
+          content.contains('سرم ') ||
+          content.contains('آنتی بیوتیک') ||
+          content.contains('مسکن') ||
+          content.toLowerCase().contains('prescription:') ||
+          content.toLowerCase().contains('rx:') ||
+          content.toLowerCase().contains('medicine:') ||
+          content.toLowerCase().contains('tablet') ||
+          content.toLowerCase().contains('capsule') ||
+          content.toLowerCase().contains('syrup') ||
+          content.toLowerCase().contains('injection');
+
+      // If this is a prescription, check if user has an active subscription with remaining uses
+      if (isPrescription) {
+        final activeSubscriptions =
+            await _ref.read(activeSubscriptionsProvider.future);
+
+        // Check if there are any active subscriptions
+        if (activeSubscriptions.isEmpty) {
+          throw Exception('برای تحلیل نسخه نیاز به اشتراک فعال دارید');
+        }
+
+        // Check if the active subscription has remaining uses
+        final subscription = activeSubscriptions.first;
+        if (subscription.remainingUses != null &&
+            subscription.remainingUses! <= 0) {
+          throw Exception(
+              'تعداد نسخه‌های باقیمانده شما به پایان رسیده است. لطفا اشتراک خود را تمدید کنید');
+        }
+
+        // Check if the subscription has expired
+        if (subscription.expiryDate != null &&
+            subscription.expiryDate!.isBefore(DateTime.now())) {
+          throw Exception(
+              'اشتراک شما منقضی شده است. لطفا اشتراک خود را تمدید کنید');
+        }
+      } else {
+        // For non-prescription messages, just check if user has any active subscription
+        final currentPlan = await _ref.read(currentPlanProvider.future);
+        if (currentPlan == null) {
+          throw Exception('برای ارسال پیام جدید نیاز به اشتراک فعال دارید');
+        }
       }
 
       // Add optimistic message for better UX
@@ -84,20 +134,11 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
         });
         AppLogger.i('Message sent successfully to chat $_chatId');
 
-        // Check if this is a prescription message that should trigger AI analysis
-        final isPrescription = content.contains('نسخه:') ||
-            content.contains('نسخه ') ||
-            content.contains('دارو:') ||
-            content.contains('دارو ') ||
-            content.contains('قرص ') ||
-            content.contains('کپسول ') ||
-            content.contains('شربت ') ||
-            content.contains('آمپول ') ||
-            content.toLowerCase().contains('prescription:') ||
-            content.toLowerCase().contains('rx:') ||
-            content.toLowerCase().contains('medicine:');
-
         if (isPrescription) {
+          // Refresh subscription data to update remaining uses
+          _ref.invalidate(activeSubscriptionsProvider);
+          _ref.invalidate(userSubscriptionsProvider);
+
           // Add temporary "thinking" message
           final thinkingId =
               'thinking-${DateTime.now().millisecondsSinceEpoch}';
@@ -178,16 +219,37 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
   // Poll for new AI response after sending a prescription message
   Future<void> _pollForAIResponse(String thinkingMessageId) async {
     // Define polling parameters
-    final int maxAttempts = 20; // افزایش تعداد تلاش‌ها از 12 به 20
+    final int maxAttempts = 30; // Increased from 20 to 30 attempts
     const Duration pollInterval =
-        Duration(seconds: 5); // افزایش فاصله زمانی از 3 به 5 ثانیه
+        Duration(seconds: 3); // Reduced from 5 to 3 seconds for faster response
     int attempts = 0;
     bool aiResponseReceived = false;
 
     // Keep track of last message count to detect new messages
     int lastMessageCount = 0;
+
+    // Get the timestamp of when this thinking message was created
+    // This is crucial for distinguishing between old and new responses
+    DateTime thinkingMessageTimestamp = DateTime.now();
+
     state.whenData((messages) {
       lastMessageCount = messages.length;
+
+      // Find the thinking message to get its timestamp
+      final thinkingMsg = messages.firstWhere(
+        (msg) => msg.id == thinkingMessageId,
+        orElse: () => Message(
+          id: thinkingMessageId,
+          content: '',
+          role: 'assistant',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          contentType: 'thinking',
+        ),
+      );
+
+      thinkingMessageTimestamp = thinkingMsg.createdAt;
+      AppLogger.d('Thinking message timestamp: $thinkingMessageTimestamp');
     });
 
     AppLogger.i('Starting to poll for AI response with ID: $thinkingMessageId');
@@ -201,28 +263,31 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
       AppLogger.d('Current messages in chat:');
       for (final msg in messages) {
         AppLogger.d(
-            'Message [${msg.id}] - Role: ${msg.role}, Type: ${msg.contentType}, Length: ${msg.content.length}');
+            'Message [${msg.id}] - Role: ${msg.role}, Type: ${msg.contentType}, Length: ${msg.content.length}, Created: ${msg.createdAt}');
       }
 
+      // Only consider assistant messages that were created AFTER our thinking message
+      // This ensures we don't pick up old responses from previous prescriptions
       final assistantMessages = messages
           .where((msg) =>
               msg.role == 'assistant' &&
               msg.contentType == 'text' &&
               !msg.isThinking &&
-              !msg.isLoading)
+              !msg.isLoading &&
+              msg.createdAt.isAfter(thinkingMessageTimestamp))
           .toList();
 
       if (assistantMessages.isNotEmpty) {
-        // Found existing assistant message
+        // Found existing assistant message that was created after our thinking message
         AppLogger.i(
-            'Found ${assistantMessages.length} existing assistant messages, no need to poll');
+            'Found ${assistantMessages.length} existing assistant messages created after our thinking message, no need to poll');
 
         // Get the most recent assistant message
         final latestAssistantMessage = assistantMessages
             .reduce((a, b) => a.createdAt.isAfter(b.createdAt) ? a : b);
 
         AppLogger.d(
-            'Using assistant message: [ID: ${latestAssistantMessage.id}] Length: ${latestAssistantMessage.content.length} chars');
+            'Using assistant message: [ID: ${latestAssistantMessage.id}] Length: ${latestAssistantMessage.content.length} chars, Created: ${latestAssistantMessage.createdAt}');
 
         // Migrate the message content if needed
         final migratedContent = MessageMigrationService.migrateAIMessage(
@@ -263,32 +328,57 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
             'Polling for AI response, attempt ${attempts + 1}/$maxAttempts');
         await Future.delayed(pollInterval);
 
-        // Fetch latest messages from server
-        final messages = await _chatService.getChatMessages(_chatId);
+        // Fetch latest messages from server with retry mechanism
+        List<Message> messages = [];
+        bool fetchSuccess = false;
+        int retryCount = 0;
+        const maxRetries = 3;
+
+        while (!fetchSuccess && retryCount < maxRetries) {
+          try {
+            messages = await _chatService.getChatMessages(_chatId);
+            fetchSuccess = true;
+          } catch (fetchError) {
+            retryCount++;
+            AppLogger.e(
+                'Error fetching messages (attempt $retryCount): $fetchError');
+            if (retryCount < maxRetries) {
+              await Future.delayed(Duration(seconds: 1));
+            }
+          }
+        }
+
+        if (!fetchSuccess) {
+          AppLogger.e('Failed to fetch messages after $maxRetries attempts');
+          attempts++;
+          continue;
+        }
 
         // Log all messages for debugging
         AppLogger.d('Messages after polling attempt ${attempts + 1}:');
         for (final msg in messages) {
           AppLogger.d(
-              'Message [${msg.id}] - Role: ${msg.role}, Type: ${msg.contentType}, Length: ${msg.content.length}');
+              'Message [${msg.id}] - Role: ${msg.role}, Type: ${msg.contentType}, Length: ${msg.content.length}, Created: ${msg.createdAt}');
         }
 
-        // Check for assistant messages first, regardless of count comparison
+        // Check for assistant messages created AFTER our thinking message
         final assistantMessages = messages
             .where((msg) =>
                 msg.role == 'assistant' &&
                 msg.contentType == 'text' &&
                 !msg.isThinking &&
-                !msg.isLoading)
+                !msg.isLoading &&
+                msg.createdAt.isAfter(thinkingMessageTimestamp))
             .toList();
 
         if (assistantMessages.isNotEmpty) {
           // Found new assistant message
-          AppLogger.i('Found ${assistantMessages.length} assistant messages');
+          AppLogger.i(
+              'Found ${assistantMessages.length} assistant messages created after our thinking message');
 
           for (final msg in assistantMessages) {
             AppLogger.d(
-                'Assistant message: [ID: ${msg.id}] Length: ${msg.content.length} chars');
+                'Assistant message: [ID: ${msg.id}] Length: ${msg.content.length} chars, Created: ${msg.createdAt}');
           }
 
           // Get the most recent assistant message
@@ -328,18 +418,19 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
 
         // Fallback to message count check
         else if (messages.length > lastMessageCount) {
-          // New message(s) added, check if any are from assistant
+          // New message(s) added, check if any are from assistant and created after our thinking message
           final newAssistantMessages = messages
               .where((msg) =>
                   msg.role == 'assistant' &&
                   msg.contentType == 'text' &&
                   !msg.isThinking &&
-                  !msg.isLoading)
+                  !msg.isLoading &&
+                  msg.createdAt.isAfter(thinkingMessageTimestamp))
               .toList();
 
           if (newAssistantMessages.isNotEmpty) {
             AppLogger.d(
-                'Found ${newAssistantMessages.length} assistant messages');
+                'Found ${newAssistantMessages.length} new assistant messages');
 
             // Migrate all new assistant messages
             final migratedMessages = newAssistantMessages.map((msg) {
@@ -359,7 +450,7 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
 
             for (final msg in migratedMessages) {
               AppLogger.d(
-                  'Migrated assistant message: [ID: ${msg.id}] Length: ${msg.content.length} chars');
+                  'Migrated assistant message: [ID: ${msg.id}] Length: ${msg.content.length} chars, Created: ${msg.createdAt}');
             }
 
             // Replace thinking message with actual AI response
@@ -385,6 +476,8 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
       } catch (e) {
         AppLogger.e('Error polling for AI response: $e');
         attempts++;
+        // Add a short delay before retrying after an error
+        await Future.delayed(Duration(milliseconds: 500));
       }
     }
 
@@ -392,6 +485,53 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
     if (!aiResponseReceived) {
       AppLogger.w(
           'No AI response received after $maxAttempts polling attempts');
+
+      // Try one final direct fetch before giving up
+      try {
+        final finalMessages = await _chatService.getChatMessages(_chatId);
+        final assistantMessages = finalMessages
+            .where((msg) =>
+                msg.role == 'assistant' &&
+                msg.contentType == 'text' &&
+                !msg.isThinking &&
+                !msg.isLoading &&
+                msg.createdAt.isAfter(thinkingMessageTimestamp))
+            .toList();
+
+        if (assistantMessages.isNotEmpty) {
+          // Found an assistant message in the final check
+          final latestAssistantMessage = assistantMessages
+              .reduce((a, b) => a.createdAt.isAfter(b.createdAt) ? a : b);
+
+          final migratedContent = MessageMigrationService.migrateAIMessage(
+            latestAssistantMessage.content,
+          );
+
+          final migratedMessage = Message(
+            id: latestAssistantMessage.id,
+            content: migratedContent,
+            role: latestAssistantMessage.role,
+            createdAt: latestAssistantMessage.createdAt,
+            updatedAt: latestAssistantMessage.updatedAt,
+            contentType: latestAssistantMessage.contentType,
+          );
+
+          state.whenData((currentMessages) {
+            final filteredMessages = currentMessages
+                .where((msg) => msg.id != thinkingMessageId)
+                .toList();
+
+            state = AsyncValue.data([...filteredMessages, migratedMessage]);
+          });
+
+          AppLogger.i('Found assistant message in final check');
+          return;
+        }
+      } catch (e) {
+        AppLogger.e('Error in final attempt to fetch messages: $e');
+      }
+
+      // If we still don't have a response, show error message
       state.whenData((messages) {
         final filteredMessages =
             messages.where((msg) => msg.id != thinkingMessageId).toList();
@@ -408,13 +548,6 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
 
         state = AsyncValue.data([...filteredMessages, timeoutMessage]);
       });
-
-      // Try to force refresh messages from server one last time
-      try {
-        await _chatService.getChatMessages(_chatId);
-      } catch (e) {
-        AppLogger.e('Error in final attempt to refresh messages: $e');
-      }
     }
   }
 
@@ -496,10 +629,38 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
         throw Exception('Image file does not exist');
       }
 
+      // Check if user has an active subscription with remaining uses for prescription analysis
+      final activeSubscriptions =
+          await _ref.read(activeSubscriptionsProvider.future);
+
+      // Check if there are any active subscriptions
+      if (activeSubscriptions.isEmpty) {
+        throw Exception('برای تحلیل نسخه تصویری نیاز به اشتراک فعال دارید');
+      }
+
+      // Check if the active subscription has remaining uses
+      final subscription = activeSubscriptions.first;
+      if (subscription.remainingUses != null &&
+          subscription.remainingUses! <= 0) {
+        throw Exception(
+            'تعداد نسخه‌های باقیمانده شما به پایان رسیده است. لطفا اشتراک خود را تمدید کنید');
+      }
+
+      // Check if the subscription has expired
+      if (subscription.expiryDate != null &&
+          subscription.expiryDate!.isBefore(DateTime.now())) {
+        throw Exception(
+            'اشتراک شما منقضی شده است. لطفا اشتراک خود را تمدید کنید');
+      }
+
       // Log file size
       final fileSize = await file.length();
       AppLogger.d(
           'Image file size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+
+      // Generate a unique timestamp for this request
+      final requestTimestamp = DateTime.now();
+      AppLogger.d('Image message request timestamp: $requestTimestamp');
 
       // Add a temporary loading message
       final tempId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -507,8 +668,8 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
         id: tempId,
         content: 'در حال آپلود تصویر...',
         role: 'user',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        createdAt: requestTimestamp,
+        updatedAt: requestTimestamp,
         contentType: 'loading',
       );
 
@@ -550,6 +711,10 @@ class MessageListNotifier extends StateNotifier<AsyncValue<List<Message>>> {
           state = AsyncValue.data([...messages, errorMessage]);
         });
       } else {
+        // Refresh subscription data to update remaining uses
+        _ref.invalidate(activeSubscriptionsProvider);
+        _ref.invalidate(userSubscriptionsProvider);
+
         // Add temporary "thinking" message for prescription image analysis
         final thinkingId = 'thinking-${DateTime.now().millisecondsSinceEpoch}';
         final thinkingMessage = Message(

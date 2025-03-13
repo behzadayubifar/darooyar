@@ -16,7 +16,6 @@ import 'features/chat/screens/chat_list_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
 import 'features/chat/services/chat_service.dart';
 import 'features/subscription/screens/subscription_screen.dart';
-import 'features/chat/providers/chat_providers.dart';
 import 'features/dashboard/screens/dashboard_screen.dart';
 
 // Flag to track if API endpoint discovery has been run

@@ -1,0 +1,15 @@
+{
+  "platform": "docker",
+  "port": 4222,
+  "app": "darooyar-nats-server",
+  "disks": [
+    {
+      "name": "data",
+      "mountTo": "/data"
+    }
+  ],
+  "network": {
+    "name": "backend-net",
+    "alias": "darooyar-nats-server"
+  }
+}

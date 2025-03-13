@@ -11,6 +11,7 @@ import (
 	"github.com/darooyar/server/db/migrations"
 	"github.com/darooyar/server/handlers"
 	"github.com/darooyar/server/middleware"
+	"github.com/darooyar/server/nats"
 	"github.com/joho/godotenv"
 )
 
@@ -42,6 +43,24 @@ func main() {
 	// Run in-memory migrations
 	if err := migrations.RunInMemoryMigrations(); err != nil {
 		log.Fatalf("Failed to run in-memory database migrations: %v", err)
+	}
+
+	// Initialize NATS
+	if err := nats.InitNATS(); err != nil {
+		log.Printf("Warning: Failed to initialize NATS: %v", err)
+		log.Println("The server will continue without NATS support. AI requests will be processed synchronously.")
+	} else {
+		defer nats.CloseNATS()
+
+		// Initialize AI service for NATS
+		aiService, err := nats.NewAIService()
+		if err != nil {
+			log.Printf("Warning: Failed to initialize AI service for NATS: %v", err)
+			log.Println("The server will continue without NATS AI service. AI requests will be processed synchronously.")
+		} else {
+			log.Println("AI service initialized for NATS")
+			_ = aiService // Use the service to avoid unused variable warning
+		}
 	}
 
 	// Create a new ServeMux (router)

@@ -1,0 +1,9 @@
+{
+  "platform": "docker",
+  "app": "darooyab",
+  "port": 8080,
+  "network": {
+    "name": "backend-net",
+    "alias": "darooyar-server"
+  }
+}

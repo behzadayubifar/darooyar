@@ -1,4 +1,4 @@
-package com.example.darooyar
+package com.bezidev.darooyar
 
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -7,7 +7,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.darooyar/stylus"
+    private val CHANNEL = "com.bezidev.darooyar/stylus"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -35,4 +35,4 @@ class MainActivity: FlutterActivity() {
             // Ignore any errors
         }
     }
-}
+} 

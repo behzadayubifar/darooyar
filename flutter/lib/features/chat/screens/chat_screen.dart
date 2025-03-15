@@ -324,6 +324,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // Add a set to track expanded panel IDs
   final Set<String> _expandedPanelIds = {};
 
+  // Add a state variable for tracking if the subscription banner is collapsed
+  bool _isSubscriptionBannerCollapsed = true;
+
   @override
   void initState() {
     super.initState();
@@ -1751,6 +1754,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                   color: AppTheme.textSecondaryColor,
                                 ),
                               ),
+
+                              // Show subscription banner if no subscription
+                              if (!hasActiveSubscription)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 24.0),
+                                  child:
+                                      _buildSubscriptionPromptWidget(context),
+                                ),
                             ],
                           ),
                         ),
@@ -1767,57 +1778,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       }
                     });
 
+                    // Create a list of widgets that includes messages and possibly the subscription banner
+                    List<Widget> listItems = [];
+
+                    // Add all messages
+                    for (int index = 0; index < messages.length; index++) {
+                      final message = messages[index];
+                      final isUser = message.role == 'user';
+                      final isImage = message.isImage;
+                      final isLoading = message.isLoading;
+                      final isError = message.isError;
+                      final isThinking = message.isThinking;
+
+                      listItems.add(
+                        MessageBubble(
+                          message: message,
+                          isUser: isUser,
+                          isError: isError,
+                          isLoading: isLoading,
+                          isThinking: isThinking,
+                          isImage: isImage,
+                          messageContent: isError
+                              ? _buildErrorMessageContent(message.content)
+                              : _buildMessageContent(message.content, isImage,
+                                  isLoading, isThinking,
+                                  isUser: isUser, isError: isError),
+                          onRetry: isError
+                              ? () {
+                                  // Retry sending the failed message
+                                  final originalContent = message.content
+                                      .split('\n')
+                                      .first
+                                      .replaceFirst('خطا در ارسال پیام: ', '');
+                                  if (originalContent.isNotEmpty) {
+                                    ref
+                                        .read(
+                                            messageListProvider(widget.chat.id)
+                                                .notifier)
+                                        .sendMessage(originalContent);
+                                  }
+                                }
+                              : null,
+                          onPanelExpansionChanged: _handlePanelExpansionChanged,
+                        ),
+                      );
+                    }
+
                     return RefreshIndicator(
                       onRefresh: () => ref
                           .read(messageListProvider(widget.chat.id).notifier)
                           .loadMessages(),
-                      child: ListView.builder(
+                      child: ListView(
                         controller: _scrollController,
                         padding: const EdgeInsets.all(8),
-                        itemCount: messages.length,
                         key: PageStorageKey<String>(
                             'chat_list_${widget.chat.id}'),
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          final isUser = message.role == 'user';
-                          final isImage = message.isImage;
-                          final isLoading = message.isLoading;
-                          final isError = message.isError;
-                          final isThinking = message.isThinking;
-
-                          return MessageBubble(
-                            message: message,
-                            isUser: isUser,
-                            isError: isError,
-                            isLoading: isLoading,
-                            isThinking: isThinking,
-                            isImage: isImage,
-                            messageContent: isError
-                                ? _buildErrorMessageContent(message.content)
-                                : _buildMessageContent(message.content, isImage,
-                                    isLoading, isThinking,
-                                    isUser: isUser, isError: isError),
-                            onRetry: isError
-                                ? () {
-                                    // Retry sending the failed message
-                                    final originalContent = message.content
-                                        .split('\n')
-                                        .first
-                                        .replaceFirst(
-                                            'خطا در ارسال پیام: ', '');
-                                    if (originalContent.isNotEmpty) {
-                                      ref
-                                          .read(messageListProvider(
-                                                  widget.chat.id)
-                                              .notifier)
-                                          .sendMessage(originalContent);
-                                    }
-                                  }
-                                : null,
-                            onPanelExpansionChanged:
-                                _handlePanelExpansionChanged,
-                          );
-                        },
+                        children: listItems,
                       ),
                     );
                   },
@@ -2574,93 +2590,189 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return hasPrescriptionTags || hasPrescriptionPatterns;
   }
 
-  // Widget para mostrar cuando el usuario no tiene una suscripción activa
+  // Widget to show when the user doesn't have an active subscription
   Widget _buildSubscriptionPromptWidget(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Icono animado con efecto de pulso
-          TweenAnimationBuilder(
-            tween: Tween<double>(begin: 0.8, end: 1.0),
-            duration: const Duration(seconds: 1),
-            curve: Curves.easeInOut,
-            builder: (context, value, child) {
-              return Transform.scale(
-                scale: value,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.workspace_premium,
-                    color: AppTheme.primaryColor,
-                    size: 36,
-                  ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Collapsible header - always visible
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isSubscriptionBannerCollapsed = !_isSubscriptionBannerCollapsed;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-              );
-            },
-            onEnd: () {
-              // Reiniciar la animación
-              setState(() {});
-            },
-          ),
-          const SizedBox(height: 16),
-          // Mensaje principal
-          Text(
-            'اشتراک شما فعال نیست',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primaryColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          // Mensaje secundario
-          Text(
-            'برای ارسال نسخه و دریافت پاسخ، نیاز به اشتراک فعال دارید',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          // Botón de suscripción
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/subscription');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-              elevation: 4,
+              ],
+              borderRadius: _isSubscriptionBannerCollapsed
+                  ? BorderRadius.circular(12)
+                  : BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
+                    ),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.shopping_cart, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'خرید اشتراک',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.workspace_premium,
+                        color: AppTheme.primaryColor,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'اشتراک فعال نیست',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                Icon(
+                  _isSubscriptionBannerCollapsed
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: Colors.grey,
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+
+        // Expandable content
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: _isSubscriptionBannerCollapsed ? 0 : null,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
+          ),
+          child: ClipRect(
+            child: _isSubscriptionBannerCollapsed
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Animated icon with pulse effect
+                        TweenAnimationBuilder(
+                          tween: Tween<double>(begin: 0.8, end: 1.0),
+                          duration: const Duration(seconds: 1),
+                          curve: Curves.easeInOut,
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.workspace_premium,
+                                  color: AppTheme.primaryColor,
+                                  size: 36,
+                                ),
+                              ),
+                            );
+                          },
+                          onEnd: () {
+                            // Restart animation
+                            if (mounted && !_isSubscriptionBannerCollapsed) {
+                              setState(() {});
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Main message
+                        Text(
+                          'اشتراک شما فعال نیست',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Secondary message
+                        Text(
+                          'برای ارسال نسخه و دریافت پاسخ، نیاز به اشتراک فعال دارید',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade700,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Subscription button
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/subscription');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            elevation: 4,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.shopping_cart, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'خرید اشتراک',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 

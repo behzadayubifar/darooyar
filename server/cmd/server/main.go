@@ -127,6 +127,8 @@ func main() {
 	// Auth and other routes
 	protected.HandleFunc("GET /api/auth/me", authHandler.GetMe)
 	protected.HandleFunc("GET /api/auth/verify", authHandler.VerifyToken)
+	protected.HandleFunc("PUT /api/auth/profile", authHandler.UpdateProfile)
+	protected.HandleFunc("POST /api/auth/change-password", authHandler.ChangePassword)
 	protected.HandleFunc("POST /api/analyze-prescription/text", prescriptionHandler.AnalyzePrescriptionText)
 	protected.HandleFunc("POST /api/analyze-prescription/image", prescriptionHandler.AnalyzePrescriptionImage)
 	protected.HandleFunc("POST /api/ai/completion", aiHandler.GenerateCompletion)

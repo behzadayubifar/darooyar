@@ -175,6 +175,13 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<User?>> {
       });
     }
   }
+
+  // Update user data in the state
+  void updateUserData(User updatedUser) {
+    debugPrint(
+        'AuthStateNotifier: Updating user data for: ${updatedUser.email}');
+    state = AsyncValue.data(updatedUser);
+  }
 }
 
 // Convenience provider for auth status

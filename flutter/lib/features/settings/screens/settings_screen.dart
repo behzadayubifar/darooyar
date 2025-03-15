@@ -10,6 +10,7 @@ import '../../../utils/myket_utils.dart';
 import '../../../services/myket_rating_service.dart';
 import '../widgets/myket_rating_section.dart';
 import '../../subscription/screens/credit_payment_screen.dart';
+import '../../auth/services/auth_service.dart';
 
 // Theme mode provider
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
@@ -133,6 +134,77 @@ class SettingsScreen extends ConsumerWidget {
     final confirmPasswordController = TextEditingController();
     bool isLoading = false;
 
+    // متغیرهای خطا برای هر فیلد
+    String? currentPasswordError;
+    String? newPasswordError;
+    String? confirmPasswordError;
+
+    // Create focus nodes for each field
+    final currentPasswordFocus = FocusNode();
+    final newPasswordFocus = FocusNode();
+    final confirmPasswordFocus = FocusNode();
+
+    // اعتبارسنجی رمز عبور فعلی
+    bool validateCurrentPassword() {
+      if (currentPasswordController.text.isEmpty) {
+        currentPasswordError = 'لطفا رمز عبور فعلی را وارد کنید';
+        return false;
+      }
+      currentPasswordError = null;
+      return true;
+    }
+
+    // اعتبارسنجی رمز عبور جدید
+    bool validateNewPassword() {
+      final password = newPasswordController.text;
+      if (password.isEmpty) {
+        newPasswordError = 'لطفا رمز عبور جدید را وارد کنید';
+        return false;
+      }
+      if (password.length < 8) {
+        newPasswordError = 'رمز عبور باید حداقل ۸ کاراکتر باشد';
+        return false;
+      }
+      if (!password.contains(RegExp(r'[A-Z]'))) {
+        newPasswordError = 'رمز عبور باید حداقل یک حرف بزرگ داشته باشد';
+        return false;
+      }
+      if (!password.contains(RegExp(r'[a-z]'))) {
+        newPasswordError = 'رمز عبور باید حداقل یک حرف کوچک داشته باشد';
+        return false;
+      }
+      if (!password.contains(RegExp(r'[0-9]'))) {
+        newPasswordError = 'رمز عبور باید حداقل یک عدد داشته باشد';
+        return false;
+      }
+      newPasswordError = null;
+      return true;
+    }
+
+    // اعتبارسنجی تکرار رمز عبور
+    bool validateConfirmPassword() {
+      if (confirmPasswordController.text.isEmpty) {
+        confirmPasswordError = 'لطفا تکرار رمز عبور را وارد کنید';
+        return false;
+      }
+      if (confirmPasswordController.text != newPasswordController.text) {
+        confirmPasswordError = 'تکرار رمز عبور با رمز عبور جدید مطابقت ندارد';
+        return false;
+      }
+      confirmPasswordError = null;
+      return true;
+    }
+
+    // اعتبارسنجی کل فرم
+    bool validateForm() {
+      final isCurrentPasswordValid = validateCurrentPassword();
+      final isNewPasswordValid = validateNewPassword();
+      final isConfirmPasswordValid = validateConfirmPassword();
+      return isCurrentPasswordValid &&
+          isNewPasswordValid &&
+          isConfirmPasswordValid;
+    }
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -144,29 +216,95 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 TextField(
                   controller: currentPasswordController,
-                  decoration: const InputDecoration(
+                  focusNode: currentPasswordFocus,
+                  decoration: InputDecoration(
                     labelText: 'رمز عبور فعلی',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText: currentPasswordError,
                   ),
                   obscureText: true,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) {
+                    // پاک کردن خطا هنگام تایپ
+                    if (currentPasswordError != null) {
+                      setState(() {
+                        currentPasswordError = null;
+                      });
+                    }
+                  },
+                  onSubmitted: (_) {
+                    // Move to next field when Enter/Next is pressed
+                    FocusScope.of(context).requestFocus(newPasswordFocus);
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: newPasswordController,
-                  decoration: const InputDecoration(
+                  focusNode: newPasswordFocus,
+                  decoration: InputDecoration(
                     labelText: 'رمز عبور جدید',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText: newPasswordError,
+                    helperText: 'حداقل ۸ کاراکتر، شامل حروف بزرگ، کوچک و اعداد',
+                    helperMaxLines: 2,
                   ),
                   obscureText: true,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) {
+                    // پاک کردن خطا هنگام تایپ
+                    if (newPasswordError != null) {
+                      setState(() {
+                        newPasswordError = null;
+                      });
+                    }
+                  },
+                  onSubmitted: (_) {
+                    // Move to next field when Enter/Next is pressed
+                    FocusScope.of(context).requestFocus(confirmPasswordFocus);
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: confirmPasswordController,
-                  decoration: const InputDecoration(
+                  focusNode: confirmPasswordFocus,
+                  decoration: InputDecoration(
                     labelText: 'تکرار رمز عبور جدید',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    errorText: confirmPasswordError,
                   ),
                   obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) {
+                    // پاک کردن خطا هنگام تایپ
+                    if (confirmPasswordError != null) {
+                      setState(() {
+                        confirmPasswordError = null;
+                      });
+                    }
+                  },
+                  onSubmitted: (_) {
+                    // Close keyboard and submit form when Enter/Done is pressed on last field
+                    FocusScope.of(context).unfocus();
+                    if (!isLoading) {
+                      setState(() {
+                        if (validateForm()) {
+                          SettingsScreen._changePassword(
+                            context,
+                            setState,
+                            currentPasswordController.text,
+                            newPasswordController.text,
+                            () => setState(() => isLoading = true),
+                            () => setState(() => isLoading = false),
+                            (error) =>
+                                setState(() => currentPasswordError = error),
+                            (error) => setState(() => newPasswordError = error),
+                            (error) =>
+                                setState(() => confirmPasswordError = error),
+                          );
+                        }
+                      });
+                    }
+                  },
                 ),
               ],
             ),
@@ -181,41 +319,21 @@ class SettingsScreen extends ConsumerWidget {
             else
               ElevatedButton(
                 onPressed: () async {
-                  if (newPasswordController.text !=
-                      confirmPasswordController.text) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('رمز عبور جدید و تکرار آن مطابقت ندارند')),
-                    );
-                    return;
-                  }
-
-                  setState(() => isLoading = true);
-
-                  try {
-                    // TODO: Implement password change API call
-                    await Future.delayed(
-                        const Duration(seconds: 1)); // Simulate API call
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('رمز عبور با موفقیت تغییر یافت')),
+                  setState(() {
+                    if (validateForm()) {
+                      SettingsScreen._changePassword(
+                        context,
+                        setState,
+                        currentPasswordController.text,
+                        newPasswordController.text,
+                        () => setState(() => isLoading = true),
+                        () => setState(() => isLoading = false),
+                        (error) => setState(() => currentPasswordError = error),
+                        (error) => setState(() => newPasswordError = error),
+                        (error) => setState(() => confirmPasswordError = error),
                       );
                     }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('خطا در تغییر رمز عبور: $e')),
-                      );
-                    }
-                  } finally {
-                    if (context.mounted) {
-                      setState(() => isLoading = false);
-                    }
-                  }
+                  });
                 },
                 child: const Text('تغییر رمز عبور'),
               ),
@@ -225,10 +343,92 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  static Future<void> _changePassword(
+    BuildContext context,
+    StateSetter setState,
+    String currentPassword,
+    String newPassword,
+    Function() setLoadingTrue,
+    Function() setLoadingFalse,
+    Function(String?) setCurrentPasswordError,
+    Function(String?) setNewPasswordError,
+    Function(String?) setConfirmPasswordError,
+  ) async {
+    setLoadingTrue();
+
+    try {
+      final authService = AuthService();
+      await authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رمز عبور با موفقیت تغییر یافت')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        // ترجمه پیام خطا به فارسی
+        String errorMessage = e.toString();
+
+        // بررسی نوع خطا
+        if (errorMessage.contains('Current password is incorrect') ||
+            errorMessage.contains('رمز عبور فعلی اشتباه است')) {
+          // نمایش خطای رمز عبور فعلی در فیلد مربوطه
+          setCurrentPasswordError('رمز عبور فعلی اشتباه است');
+        } else {
+          // سایر خطاها را در اسنک‌بار نمایش می‌دهیم
+          if (errorMessage.contains('Invalid request body')) {
+            errorMessage = 'درخواست نامعتبر است';
+          } else if (errorMessage.contains('Unauthorized')) {
+            errorMessage = 'دسترسی غیرمجاز';
+          } else if (errorMessage.contains('User not found')) {
+            errorMessage = 'کاربر یافت نشد';
+          } else if (errorMessage
+              .contains('Password must be at least 8 characters long')) {
+            setNewPasswordError('رمز عبور باید حداقل ۸ کاراکتر باشد');
+            setLoadingFalse();
+            return;
+          } else if (errorMessage.contains(
+              'Password must contain at least one uppercase letter')) {
+            setNewPasswordError('رمز عبور باید حداقل یک حرف بزرگ داشته باشد');
+            setLoadingFalse();
+            return;
+          } else if (errorMessage.contains(
+              'Password must contain at least one lowercase letter')) {
+            setNewPasswordError('رمز عبور باید حداقل یک حرف کوچک داشته باشد');
+            setLoadingFalse();
+            return;
+          } else if (errorMessage
+              .contains('Password must contain at least one digit')) {
+            setNewPasswordError('رمز عبور باید حداقل یک عدد داشته باشد');
+            setLoadingFalse();
+            return;
+          } else {
+            errorMessage = 'خطا در تغییر رمز عبور: لطفا دوباره تلاش کنید';
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMessage)),
+          );
+        }
+      }
+    } finally {
+      setLoadingFalse();
+    }
+  }
+
   void _showEditProfileDialog(BuildContext context, WidgetRef ref) {
     final firstNameController = TextEditingController(text: user.firstName);
     final lastNameController = TextEditingController(text: user.lastName);
     bool isLoading = false;
+
+    // Create focus nodes for each field
+    final firstNameFocus = FocusNode();
+    final lastNameFocus = FocusNode();
 
     showDialog(
       context: context,
@@ -243,11 +443,17 @@ class SettingsScreen extends ConsumerWidget {
                   textDirection: TextDirection.rtl,
                   child: TextField(
                     controller: firstNameController,
+                    focusNode: firstNameFocus,
                     textDirection: TextDirection.rtl,
                     decoration: const InputDecoration(
                       labelText: 'نام',
                       border: OutlineInputBorder(),
                     ),
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) {
+                      // Move to next field when Enter/Next is pressed
+                      FocusScope.of(context).requestFocus(lastNameFocus);
+                    },
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -255,11 +461,28 @@ class SettingsScreen extends ConsumerWidget {
                   textDirection: TextDirection.rtl,
                   child: TextField(
                     controller: lastNameController,
+                    focusNode: lastNameFocus,
                     textDirection: TextDirection.rtl,
                     decoration: const InputDecoration(
                       labelText: 'نام خانوادگی',
                       border: OutlineInputBorder(),
                     ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      // Close keyboard and submit form when Enter/Done is pressed on last field
+                      FocusScope.of(context).unfocus();
+                      if (!isLoading) {
+                        _updateProfile(
+                          context,
+                          ref,
+                          setState,
+                          firstNameController.text,
+                          lastNameController.text,
+                          () => setState(() => isLoading = true),
+                          () => setState(() => isLoading = false),
+                        );
+                      }
+                    },
                   ),
                 ),
               ],
@@ -275,31 +498,15 @@ class SettingsScreen extends ConsumerWidget {
             else
               ElevatedButton(
                 onPressed: () async {
-                  setState(() => isLoading = true);
-
-                  try {
-                    // TODO: Implement profile update API call
-                    await Future.delayed(
-                        const Duration(seconds: 1)); // Simulate API call
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('پروفایل با موفقیت بروزرسانی شد')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('خطا در بروزرسانی پروفایل: $e')),
-                      );
-                    }
-                  } finally {
-                    if (context.mounted) {
-                      setState(() => isLoading = false);
-                    }
-                  }
+                  _updateProfile(
+                    context,
+                    ref,
+                    setState,
+                    firstNameController.text,
+                    lastNameController.text,
+                    () => setState(() => isLoading = true),
+                    () => setState(() => isLoading = false),
+                  );
                 },
                 child: const Text('ذخیره تغییرات'),
               ),
@@ -307,6 +514,44 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _updateProfile(
+    BuildContext context,
+    WidgetRef ref,
+    StateSetter setState,
+    String firstName,
+    String lastName,
+    Function() setLoadingTrue,
+    Function() setLoadingFalse,
+  ) async {
+    setLoadingTrue();
+
+    try {
+      final authService = AuthService();
+      final updatedUser = await authService.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+      );
+
+      // Update the user state with the new data
+      ref.read(authStateProvider.notifier).updateUserData(updatedUser);
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('پروفایل با موفقیت بروزرسانی شد')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطا در بروزرسانی پروفایل: $e')),
+        );
+      }
+    } finally {
+      setLoadingFalse();
+    }
   }
 
   void _showDeleteAccountDialog(BuildContext context, WidgetRef ref) {
@@ -492,38 +737,58 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   // Credit display
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.account_balance_wallet,
-                          color:
-                              Theme.of(context).colorScheme.onPrimaryContainer,
+                  InkWell(
+                    onTap: () {
+                      // Navigate to credit payment screen
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const CreditPaymentScreen(),
                         ),
-                        const SizedBox(width: 8),
-                        Directionality(
-                          textDirection: TextDirection.rtl,
-                          child: Text(
-                            'اعتبار: ${NumberFormatter.formatPriceInThousands(user.credit.toStringAsFixed(0))}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontFamily: 'Vazirmatn',
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.account_balance_wallet,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: Text(
+                              'اعتبار: ${NumberFormatter.formatPriceInThousands(user.credit.toStringAsFixed(0))}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontFamily: 'Vazirmatn',
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

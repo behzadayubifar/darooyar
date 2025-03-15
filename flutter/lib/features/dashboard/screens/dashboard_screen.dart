@@ -878,6 +878,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     required Color color,
     required VoidCallback onTap,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = colorScheme.brightness == Brightness.dark;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -886,8 +889,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color:
+                  isDarkMode ? color.withOpacity(0.2) : color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
+              border: isDarkMode
+                  ? Border.all(color: color.withOpacity(0.3), width: 1)
+                  : null,
             ),
             child: Icon(
               icon,
@@ -900,7 +907,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[800],
+              color: isDarkMode ? colorScheme.onSurface : Colors.grey[800],
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

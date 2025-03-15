@@ -8,6 +8,9 @@ class MyketRatingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Padding(
@@ -21,14 +24,18 @@ class MyketRatingSection extends StatelessWidget {
                 const SizedBox(width: 8.0),
                 Text(
                   'نظر و امتیاز',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16.0),
             Text(
               'اگر از برنامه راضی هستید، لطفا با دادن امتیاز و نظر در مایکت از ما حمایت کنید.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 16.0),
             Wrap(
@@ -40,17 +47,24 @@ class MyketRatingSection extends StatelessWidget {
                   onPressed: () {
                     MyketUtils.openDeveloperApps();
                   },
-                  icon: const Icon(Icons.apps),
-                  label: const Text('برنامه‌های دیگر ما'),
+                  icon: Icon(Icons.apps, color: colorScheme.primary),
+                  label: Text(
+                    'برنامه‌های دیگر ما',
+                    style: TextStyle(color: colorScheme.primary),
+                  ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(color: colorScheme.primary),
                   ),
                 ),
                 TextButton(
                   onPressed: () {
                     MyketUtils.openAppPage();
                   },
-                  child: const Text('مشاهده برنامه در مایکت'),
+                  child: Text(
+                    'مشاهده برنامه در مایکت',
+                    style: TextStyle(color: colorScheme.primary),
+                  ),
                 ),
                 ElevatedButton.icon(
                   onPressed: () {
@@ -59,13 +73,16 @@ class MyketRatingSection extends StatelessWidget {
                   icon: const Icon(Icons.star),
                   label: const Text('امتیاز دهید'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 32.0),
+            Divider(
+              height: 32.0,
+              color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+            ),
             InkWell(
               onTap: () {
                 MyketUtils.checkForUpdate(context);
@@ -77,7 +94,7 @@ class MyketRatingSection extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.system_update,
-                      color: Theme.of(context).primaryColor,
+                      color: colorScheme.primary,
                     ),
                     const SizedBox(width: 16.0),
                     Expanded(
@@ -86,17 +103,25 @@ class MyketRatingSection extends StatelessWidget {
                         children: [
                           Text(
                             'بررسی به‌روزرسانی',
-                            style: Theme.of(context).textTheme.titleSmall,
+                            style: textTheme.titleSmall?.copyWith(
+                              color: colorScheme.onSurface,
+                            ),
                           ),
                           const SizedBox(height: 4.0),
                           Text(
                             'برای بررسی وجود نسخه جدید برنامه کلیک کنید',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios, size: 16.0),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16.0,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ],
                 ),
               ),

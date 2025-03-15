@@ -389,104 +389,89 @@ class _ExpandablePanelState extends State<ExpandablePanel>
         builder: _buildChildren,
         child: closed
             ? null
-            : NotificationListener<ScrollNotification>(
-                // Allow scroll notifications to propagate to parent
-                onNotification: (ScrollNotification notification) {
-                  // Return false to allow the notification to continue to be dispatched to further ancestors
-                  return false;
-                },
-                child: Listener(
-                  // Handle mouse wheel events
-                  onPointerSignal: (PointerSignalEvent event) {
-                    // Do nothing, allowing the event to propagate to parent
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(16.0),
-                        bottomRight: Radius.circular(16.0),
-                      ),
-                      border: Border.all(
-                        color: widget.color.withOpacity(0.2),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          ResponsiveSize.size(16),
-                          ResponsiveSize.size(16),
-                          ResponsiveSize.size(16),
-                          ResponsiveSize.size(8)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Listener(
-                            // Handle mouse wheel events explicitly for the text
-                            onPointerSignal: (PointerSignalEvent event) {
-                              // Do nothing, allowing the event to propagate to parent
+            : Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16.0),
+                    bottomRight: Radius.circular(16.0),
+                  ),
+                  border: Border.all(
+                    color: widget.color.withOpacity(0.2),
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      ResponsiveSize.size(16),
+                      ResponsiveSize.size(16),
+                      ResponsiveSize.size(16),
+                      ResponsiveSize.size(8)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Use SingleChildScrollView for the content to make it scrollable
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height *
+                              0.5, // Limit max height to 50% of screen
+                        ),
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          child: SelectableText(
+                            widget.content,
+                            style: TextStyle(
+                              fontSize: ResponsiveSize.fontSize(15),
+                              height: 1.5,
+                              color: AppTheme.textPrimaryColor,
+                            ),
+                            textAlign: TextAlign.justify,
+                            selectionControls: MaterialTextSelectionControls(),
+                            contextMenuBuilder: (context, editableTextState) {
+                              return AdaptiveTextSelectionToolbar.editableText(
+                                editableTextState: editableTextState,
+                              );
                             },
-                            // Make sure drag gestures don't get captured for text selection
-                            behavior: HitTestBehavior.translucent,
-                            child: SelectableText(
-                              widget.content,
-                              style: TextStyle(
-                                fontSize: ResponsiveSize.fontSize(15),
-                                height: 1.5,
-                                color: AppTheme.textPrimaryColor,
-                              ),
-                              textAlign: TextAlign.justify,
-                              selectionControls:
-                                  MaterialTextSelectionControls(),
-                              contextMenuBuilder: (context, editableTextState) {
-                                return AdaptiveTextSelectionToolbar
-                                    .editableText(
-                                  editableTextState: editableTextState,
-                                );
-                              },
-                              textScaleFactor: 1.0,
-                              maxLines: null,
-                              textDirection: TextDirection.rtl,
-                              showCursor: true,
-                              enableInteractiveSelection: true,
-                            ),
+                            textScaleFactor: 1.0,
+                            maxLines: null,
+                            textDirection: TextDirection.rtl,
+                            showCursor: true,
+                            enableInteractiveSelection: true,
                           ),
-                          Container(
-                            alignment: Alignment.centerRight,
-                            margin: EdgeInsets.only(
-                                top: ResponsiveSize.vertical(4)),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: ResponsiveSize.width(50),
-                              ),
-                              child: TextButton.icon(
-                                onPressed: _handleTap,
-                                icon: Icon(Icons.keyboard_arrow_up,
-                                    size: ResponsiveSize.size(16)),
-                                label: Text(
-                                  'بستن',
-                                  style: TextStyle(
-                                    fontSize: ResponsiveSize.fontSize(12),
-                                    color: widget.color,
-                                  ),
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: ResponsiveSize.horizontal(3),
-                                    vertical: ResponsiveSize.vertical(0.5),
-                                  ),
-                                  backgroundColor:
-                                      widget.color.withOpacity(0.1),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        ResponsiveSize.borderRadius(8),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      Container(
+                        alignment: Alignment.centerRight,
+                        margin:
+                            EdgeInsets.only(top: ResponsiveSize.vertical(4)),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: ResponsiveSize.width(50),
+                          ),
+                          child: TextButton.icon(
+                            onPressed: _handleTap,
+                            icon: Icon(Icons.keyboard_arrow_up,
+                                size: ResponsiveSize.size(16)),
+                            label: Text(
+                              'بستن',
+                              style: TextStyle(
+                                fontSize: ResponsiveSize.fontSize(12),
+                                color: widget.color,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: ResponsiveSize.horizontal(3),
+                                vertical: ResponsiveSize.vertical(0.5),
+                              ),
+                              backgroundColor: widget.color.withOpacity(0.1),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: ResponsiveSize.borderRadius(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

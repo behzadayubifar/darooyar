@@ -337,4 +337,149 @@ class AuthService {
       return true; // Consider expired if we can't determine
     }
   }
+
+  // Update user profile (first name and last name)
+  Future<User> updateProfile({
+    required String firstName,
+    required String lastName,
+  }) async {
+    AppLogger.i('Updating profile for user');
+
+    final token = await getToken();
+    if (token == null) {
+      throw Exception('Not authenticated');
+    }
+
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8'
+        },
+        body: utf8.encode(jsonEncode({
+          'first_name': firstName,
+          'last_name': lastName,
+        })),
+      );
+
+      AppLogger.network(
+        'PUT',
+        '$baseUrl/auth/profile',
+        response.statusCode,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+
+      if (response.statusCode == 200) {
+        final userData =
+            jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+        AppLogger.i('Profile updated successfully');
+        return User.fromJson(userData);
+      } else {
+        String errorMessage;
+        try {
+          final error =
+              jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+          errorMessage = error['message'] ?? 'Failed to update profile';
+        } catch (e) {
+          errorMessage = 'Unknown error: ${response.statusCode}';
+        }
+        AppLogger.e('Profile update failed: $errorMessage');
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      AppLogger.e('Profile update error: $e');
+      if (e is FormatException) {
+        throw Exception('Server returned an invalid response');
+      }
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  // Change user password
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    AppLogger.i('Changing password for user');
+
+    final token = await getToken();
+    if (token == null) {
+      throw Exception('دسترسی غیرمجاز: لطفا دوباره وارد شوید');
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/change-password'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json; charset=utf-8'
+        },
+        body: utf8.encode(jsonEncode({
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        })),
+      );
+
+      AppLogger.network(
+        'POST',
+        '$baseUrl/auth/change-password',
+        response.statusCode,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+
+      if (response.statusCode == 200) {
+        AppLogger.i('Password changed successfully');
+        return;
+      } else {
+        String errorMessage;
+        try {
+          final error =
+              jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+          errorMessage = error['message'] ?? 'خطا در تغییر رمز عبور';
+
+          // ترجمه پیام‌های خطای رایج به فارسی
+          if (errorMessage.contains('Current password is incorrect')) {
+            errorMessage = 'رمز عبور فعلی اشتباه است';
+          } else if (errorMessage.contains('Invalid request body')) {
+            errorMessage = 'درخواست نامعتبر است';
+          } else if (errorMessage.contains('Unauthorized')) {
+            errorMessage = 'دسترسی غیرمجاز';
+          } else if (errorMessage.contains('User not found')) {
+            errorMessage = 'کاربر یافت نشد';
+          } else if (errorMessage
+              .contains('Password must be at least 8 characters long')) {
+            errorMessage = 'رمز عبور باید حداقل ۸ کاراکتر باشد';
+          } else if (errorMessage.contains(
+              'Password must contain at least one uppercase letter')) {
+            errorMessage = 'رمز عبور باید حداقل یک حرف بزرگ داشته باشد';
+          } else if (errorMessage.contains(
+              'Password must contain at least one lowercase letter')) {
+            errorMessage = 'رمز عبور باید حداقل یک حرف کوچک داشته باشد';
+          } else if (errorMessage
+              .contains('Password must contain at least one digit')) {
+            errorMessage = 'رمز عبور باید حداقل یک عدد داشته باشد';
+          }
+        } catch (e) {
+          if (response.statusCode == 401) {
+            errorMessage = 'رمز عبور فعلی اشتباه است';
+          } else if (response.statusCode == 400) {
+            errorMessage = 'درخواست نامعتبر است';
+          } else {
+            errorMessage = 'خطا در تغییر رمز عبور: کد ${response.statusCode}';
+          }
+        }
+        AppLogger.e('Password change failed: $errorMessage');
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      AppLogger.e('Password change error: $e');
+      if (e is FormatException) {
+        throw Exception('خطا در پاسخ سرور');
+      }
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
 }

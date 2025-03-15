@@ -81,7 +81,7 @@ func GetUserByEmail(email string) (*models.User, error) {
 // GetUserByID retrieves a user by ID
 func GetUserByID(id int64) (*models.User, error) {
 	query := `
-		SELECT id, username, email, first_name, last_name, credit, is_admin, created_at, updated_at
+		SELECT id, username, email, password, first_name, last_name, credit, is_admin, created_at, updated_at
 		FROM users
 		WHERE id = $1`
 
@@ -90,6 +90,7 @@ func GetUserByID(id int64) (*models.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.Email,
+		&user.Password,
 		&user.FirstName,
 		&user.LastName,
 		&user.Credit,
@@ -168,5 +169,51 @@ func SetUserAdmin(userID int64, isAdmin bool) error {
 		WHERE id = $3`
 
 	_, err := DB.Exec(query, isAdmin, time.Now(), userID)
+	return err
+}
+
+// UpdateUserProfile updates a user's profile information
+func UpdateUserProfile(userID int64, profileUpdate *models.ProfileUpdate) (*models.User, error) {
+	query := `
+		UPDATE users
+		SET first_name = $1, last_name = $2, updated_at = $3
+		WHERE id = $4
+		RETURNING id, username, email, password, first_name, last_name, credit, is_admin, created_at, updated_at`
+
+	var updatedUser models.User
+	err := DB.QueryRow(
+		query,
+		profileUpdate.FirstName,
+		profileUpdate.LastName,
+		time.Now(),
+		userID,
+	).Scan(
+		&updatedUser.ID,
+		&updatedUser.Username,
+		&updatedUser.Email,
+		&updatedUser.Password,
+		&updatedUser.FirstName,
+		&updatedUser.LastName,
+		&updatedUser.Credit,
+		&updatedUser.IsAdmin,
+		&updatedUser.CreatedAt,
+		&updatedUser.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &updatedUser, nil
+}
+
+// UpdateUserPassword updates a user's password
+func UpdateUserPassword(userID int64, hashedPassword string) error {
+	query := `
+		UPDATE users
+		SET password = $1, updated_at = $2
+		WHERE id = $3`
+
+	_, err := DB.Exec(query, hashedPassword, time.Now(), userID)
 	return err
 }

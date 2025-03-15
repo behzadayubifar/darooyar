@@ -16,3 +16,10 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(response)
 }
+
+// sendJSONResponse is a helper function to send JSON responses
+func sendJSONResponse(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data)
+}

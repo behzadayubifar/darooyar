@@ -138,6 +138,10 @@ func main() {
 	protected.HandleFunc("POST /api/credit/subtract", creditHandler.SubtractCredit)
 	protected.HandleFunc("GET /api/credit/user", creditHandler.GetUserCreditByID)
 
+	// New credit routes for user payments
+	protected.HandleFunc("POST /api/user/credit/add", creditHandler.ProcessUserPayment)
+	protected.HandleFunc("GET /api/user/transactions", creditHandler.GetUserTransactions)
+
 	// Plan and subscription routes
 	protected.HandleFunc("GET /api/plans", handlers.GetAllPlans)
 	protected.HandleFunc("GET /api/plans/{id}", handlers.GetPlanByID)

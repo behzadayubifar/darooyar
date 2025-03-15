@@ -30,6 +30,29 @@ class _CreditPaymentScreenState extends ConsumerState<CreditPaymentScreen> {
   void initState() {
     super.initState();
     _amountController.text = '100000'; // Default amount
+
+    // Initialize Myket IAP service when the screen loads
+    _initializeMyketIAP();
+  }
+
+  Future<void> _initializeMyketIAP() async {
+    try {
+      final initialized = await MyketIAPService.initialize();
+      if (!initialized) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'خطا در اتصال به سرویس پرداخت مایکت';
+          });
+        }
+      }
+    } catch (e) {
+      AppLogger.e('Error initializing Myket IAP: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'خطا در اتصال به سرویس پرداخت مایکت';
+        });
+      }
+    }
   }
 
   @override
@@ -73,11 +96,9 @@ class _CreditPaymentScreenState extends ConsumerState<CreditPaymentScreen> {
         return;
       }
 
-      // Create a SKU for the credit amount
-      final String sku = 'credit_${amount}';
-
-      // Call the MyketIAPService to process the payment
-      final result = await MyketIAPService.purchaseProduct(sku);
+      // Call the MyketIAPService to process the payment with Toman amount
+      // It will automatically convert to Rial for Myket
+      final result = await MyketIAPService.purchaseCredit(amount);
 
       if (result == null) {
         setState(() {
@@ -89,50 +110,7 @@ class _CreditPaymentScreenState extends ConsumerState<CreditPaymentScreen> {
 
       if (result['success']) {
         // Call the server API to update the user's credit
-        final dio = ref.read(dioProvider);
-        final token = await ref.read(authServiceProvider).getToken();
-
-        if (token == null) {
-          setState(() {
-            _errorMessage = 'خطا در احراز هویت';
-            _isProcessing = false;
-          });
-          return;
-        }
-
-        final response = await dio.post(
-          '/api/user/credit/add',
-          data: {
-            'amount': amount,
-            'transaction': result['purchase'],
-          },
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $token',
-            },
-          ),
-        );
-
-        if (response.statusCode == 200) {
-          // Refresh user data
-          await ref.read(authStateProvider.notifier).refreshUser();
-
-          if (mounted) {
-            // Show success message and navigate back
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('افزایش اعتبار با موفقیت انجام شد'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            Navigator.of(context).pop();
-          }
-        } else {
-          setState(() {
-            _errorMessage = 'خطا در ثبت تراکنش در سرور';
-            _isProcessing = false;
-          });
-        }
+        await _updateUserCredit(amount, result['purchase']);
       } else {
         setState(() {
           _errorMessage = result['message'] ?? 'خطا در فرآیند پرداخت';
@@ -141,8 +119,122 @@ class _CreditPaymentScreenState extends ConsumerState<CreditPaymentScreen> {
       }
     } catch (e) {
       AppLogger.e('Error in payment process: $e');
+
+      // Provide a user-friendly error message
+      String userFriendlyMessage = 'خطا در فرآیند پرداخت';
+
+      // Log the technical error but show a user-friendly message
+      if (e.toString().contains('NoSuchMethodError')) {
+        userFriendlyMessage = 'خطا در ارتباط با سرویس پرداخت';
+      } else if (e.toString().contains('network')) {
+        userFriendlyMessage = 'خطا در اتصال به اینترنت';
+      }
+
       setState(() {
-        _errorMessage = 'خطا در فرآیند پرداخت: $e';
+        _errorMessage = userFriendlyMessage;
+        _isProcessing = false;
+      });
+    }
+  }
+
+  // Update user credit on the server
+  Future<void> _updateUserCredit(
+      int amount, Map<String, dynamic> purchaseData) async {
+    try {
+      final dio = ref.read(dioProvider);
+      final token = await ref.read(authServiceProvider).getToken();
+
+      if (token == null) {
+        setState(() {
+          _errorMessage = 'خطا در احراز هویت';
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // Prepare transaction data for the server
+      final transactionData = {
+        'amount': amount,
+        'transaction': {
+          ...purchaseData,
+          'paymentGateway': 'myket',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }
+      };
+
+      AppLogger.i('Sending transaction data to server: $transactionData');
+
+      final response = await dio.post(
+        '/api/user/credit/add',
+        data: transactionData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Transaction successful
+        AppLogger.i('Credit added successfully: ${response.data}');
+
+        // Refresh user data
+        await ref.read(authStateProvider.notifier).refreshUser();
+
+        if (mounted) {
+          // Show success message and navigate back
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('افزایش اعتبار با موفقیت انجام شد'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } else if (response.statusCode == 409) {
+        // Transaction already processed
+        AppLogger.w('Transaction already processed: ${response.data}');
+
+        // Still refresh user data
+        await ref.read(authStateProvider.notifier).refreshUser();
+
+        if (mounted) {
+          // Show success message and navigate back
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('این تراکنش قبلاً پردازش شده است'),
+              backgroundColor: Colors.amber,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } else {
+        // Error processing transaction
+        AppLogger.e(
+            'Error processing transaction: ${response.statusCode} - ${response.data}');
+
+        setState(() {
+          _errorMessage =
+              response.data?['message'] ?? 'خطا در ثبت تراکنش در سرور';
+          _isProcessing = false;
+        });
+      }
+    } catch (e) {
+      AppLogger.e('Error updating user credit: $e');
+
+      // Provide a user-friendly error message
+      String userFriendlyMessage = 'خطا در ارتباط با سرور';
+
+      // Log the technical error but show a user-friendly message
+      if (e.toString().contains('timeout')) {
+        userFriendlyMessage = 'زمان ارتباط با سرور به پایان رسید';
+      } else if (e.toString().contains('network')) {
+        userFriendlyMessage = 'خطا در اتصال به اینترنت';
+      }
+
+      setState(() {
+        _errorMessage = userFriendlyMessage;
         _isProcessing = false;
       });
     }
@@ -347,18 +439,27 @@ class _CreditPaymentScreenState extends ConsumerState<CreditPaymentScreen> {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
+                  children: [
+                    const Text(
                       'توجه:',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Text(
+                    const SizedBox(height: 8),
+                    const Text(
                       'پس از کلیک روی دکمه پرداخت، به درگاه پرداخت مایکت منتقل خواهید شد. پس از تکمیل فرآیند پرداخت، اعتبار شما به صورت خودکار افزایش می‌یابد.',
                       style: TextStyle(
                         fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'مبلغ وارد شده به صورت خودکار از تومان به ریال تبدیل می‌شود.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
                   ],

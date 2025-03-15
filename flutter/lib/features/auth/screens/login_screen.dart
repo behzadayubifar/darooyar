@@ -289,6 +289,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     void Function(String)? onFieldSubmitted,
     Widget? suffixIcon,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
@@ -297,11 +299,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       validator: validator,
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).brightness == Brightness.light
-                ? Colors.white
-                : AppTheme.textPrimaryColor,
-          ),
+      style: TextStyle(
+        color: isDarkMode ? Colors.white : AppTheme.textPrimaryColor,
+        fontFamily: 'Vazirmatn',
+        fontSize: 16,
+      ),
       onFieldSubmitted: (value) {
         if (nextFocusNode != null) {
           nextFocusNode.requestFocus();
@@ -335,14 +337,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           borderSide: const BorderSide(color: AppTheme.errorColor, width: 2),
         ),
         filled: true,
-        fillColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white
-            : const Color(0xFF2C2C2C),
+        fillColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+        labelStyle: TextStyle(
+          color: isDarkMode ? Colors.grey[300] : Colors.grey[700],
+        ),
       ),
     );
   }
 
   Widget _buildRegisterLink() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
@@ -351,7 +356,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Text(
             'حساب کاربری ندارید؟',
             style: TextStyle(
-              color: Colors.grey[700],
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[700],
               fontFamily: 'Vazirmatn',
             ),
           ),

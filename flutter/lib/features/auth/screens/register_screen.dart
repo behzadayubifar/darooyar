@@ -423,6 +423,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     void Function(String)? onFieldSubmitted,
     Widget? suffixIcon,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
@@ -438,11 +440,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           onFieldSubmitted?.call(value);
         }
       },
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).brightness == Brightness.light
-                ? Colors.white
-                : AppTheme.textPrimaryColor,
-          ),
+      style: TextStyle(
+        color: isDarkMode ? Colors.white : AppTheme.textPrimaryColor,
+        fontFamily: 'Vazirmatn',
+        fontSize: 16,
+      ),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
@@ -469,14 +471,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           borderSide: const BorderSide(color: AppTheme.errorColor, width: 2),
         ),
         filled: true,
-        fillColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white
-            : const Color(0xFF2C2C2C),
+        fillColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+        labelStyle: TextStyle(
+          color: isDarkMode ? Colors.grey[300] : Colors.grey[700],
+        ),
       ),
     );
   }
 
   Widget _buildLoginLink() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
@@ -485,7 +490,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           Text(
             'حساب کاربری دارید؟ ',
             style: TextStyle(
-              color: Colors.grey[600],
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[700],
               fontFamily: 'Vazirmatn',
             ),
           ),

@@ -40,7 +40,7 @@ dependencies:
   # State management
   flutter_riverpod: ^2.5.1
   hooks_riverpod: ^2.3.6
-  flutter_hooks: ^0.20.5
+  flutter_hooks: ^0.21.2
   riverpod_annotation: ^2.1.1
 
   # Network
@@ -50,16 +50,18 @@ dependencies:
 
   # Local database
   isar: ^3.1.0+1
-  isar_flutter_libs: ^3.1.0+1
+  isar_flutter_libs:
+    git:
+      url: https://github.com/MrLittleWhite/isar_flutter_libs.git
   path_provider: ^2.1.2
 
   # UI
-  image_picker: ^0.8.9
+  image_picker: ^1.0.7
   cached_network_image: ^3.3.1
   flutter_svg: ^2.0.9
   material_design_icons_flutter: ^7.0.7296
-  lottie: ^2.3.2
-  google_fonts: ^4.0.4
+  lottie: ^3.3.1
+  google_fonts: ^6.2.1
   shimmer: ^3.0.0
   flutter_staggered_grid_view: ^0.7.0
   percent_indicator: ^4.2.3
@@ -67,10 +69,10 @@ dependencies:
   # Utils
   intl: ^0.19.0
   uuid: ^4.3.3
-  flutter_plugin_android_lifecycle: 2.0.15
+  flutter_plugin_android_lifecycle: ^2.0.27
   flutter_staggered_animations: ^1.1.1
   url_launcher: ^6.2.5
-  share_plus: ^7.2.1
+  share_plus: ^10.1.4
   image_clipboard: ^1.1.0+1
 
 dev_dependencies:
@@ -82,7 +84,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^2.0.0
+  flutter_lints: ^5.0.0
 
   # Isar generator
   isar_generator: ^3.1.0+1

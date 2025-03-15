@@ -35,7 +35,7 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: surfaceColor,
       fontFamily: persianFontFamily,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: cardColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -195,20 +195,19 @@ class AppTheme {
         seedColor: primaryColor,
         primary: primaryColor,
         secondary: secondaryColor,
-        background: const Color(0xFF121212),
         surface: const Color(0xFF1E1E1E),
         error: errorColor,
         brightness: Brightness.dark,
       ),
       scaffoldBackgroundColor: const Color(0xFF121212),
       fontFamily: persianFontFamily,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: const Color(0xFF2C2C2C),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       ),
       appBarTheme: AppBarTheme(
@@ -222,7 +221,7 @@ class AppTheme {
           fontFamily: persianFontFamily,
         ),
         iconTheme: const IconThemeData(color: accentColor),
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         surfaceTintColor: Colors.transparent,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -353,17 +352,17 @@ class AppTheme {
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return primaryColor;
           }
           return Colors.grey;
         }),
-        trackColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
-            return primaryColor.withOpacity(0.5);
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor.withValues(alpha: 0.5);
           }
-          return Colors.grey.withOpacity(0.5);
+          return Colors.grey.withValues(alpha: 0.5);
         }),
       ),
     );

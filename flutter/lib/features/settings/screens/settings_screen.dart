@@ -9,6 +9,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../../utils/myket_utils.dart';
 import '../../../services/myket_rating_service.dart';
 import '../widgets/myket_rating_section.dart';
+import '../../subscription/screens/credit_payment_screen.dart';
 
 // Theme mode provider
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
@@ -562,10 +563,11 @@ class SettingsScreen extends ConsumerWidget {
                   title: const Text('افزایش اعتبار'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // TODO: Navigate to add credit screen
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('این قابلیت به زودی اضافه خواهد شد')),
+                    // Navigate to credit payment screen
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const CreditPaymentScreen(),
+                      ),
                     );
                   },
                 ),

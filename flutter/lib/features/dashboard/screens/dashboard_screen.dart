@@ -17,6 +17,7 @@ import '../../subscription/models/subscription_plan.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../../subscription/screens/subscription_screen.dart';
+import '../../subscription/screens/credit_payment_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/utils/number_formatter.dart';
 import 'dart:math' as Math;
@@ -400,11 +401,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               ),
               TextButton(
                 onPressed: () {
-                  // Show a message instead of navigating to subscription screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('این قابلیت به زودی اضافه خواهد شد'),
-                      duration: Duration(seconds: 2),
+                  // Navigate to credit payment screen
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const CreditPaymentScreen(),
                     ),
                   );
                 },

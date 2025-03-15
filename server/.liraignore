@@ -1,0 +1,18 @@
+# Ignore specific cmd directories
+cmd/test_nats/
+
+# Ignore test files
+*_test.go
+
+# Ignore executables
+*.exe
+
+# Ignore development files
+watch.bat
+watch.ps1
+run_wifi_server.ps1
+run_nats.ps1
+
+# Ignore NATS directory
+liara-nats/
+nats/ 

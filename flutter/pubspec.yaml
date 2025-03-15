@@ -48,6 +48,9 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.2
 
+  # In-app purchase
+  myket_iap: ^1.1.10
+
   # Local database
   isar: ^3.1.0+1
   isar_flutter_libs:
